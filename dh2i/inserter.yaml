@@ -1,0 +1,36 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mssql-client
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: inserter
+  name: inserter
+  namespace: mssql-client
+spec:
+  containers:
+  - name: inserter
+    command:
+    - bash
+    - -x
+    - -o
+    - errexit
+    - -o
+    - pipefail
+    - -c
+    - |
+      while true
+      do
+        /opt/mssql-tools/bin/sqlcmd -S dxemssql-cluster-lb.mssql.svc.cluster.local,14033 -U sa -P 'MyP@SSw0rd1!' -d AdventureWorks2022 -Q "INSERT INTO Sales.MyTable (Name) VALUES ('John Doe');"
+        sleep 10
+      done
+    image: mcr.microsoft.com/mssql-tools
+    name: inserter
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}

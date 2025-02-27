@@ -1,0 +1,356 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata:
+  name: mssql-bp
+  namespace: kasten-io
+actions:
+  backup:
+    outputArtifacts:
+      mssqlCloudDump:
+        keyValue:
+          numLogBackupsBeforeFullBackup: "{{ .Phases.checkAnnotations.Output.numLogBackupsBeforeFullBackup }}"
+          counterLogBackups: "{{ .Phases.checkAnnotations.Output.counterLogBackups }}"
+          fullBackup: "{{ .Phases.checkAnnotations.Output.fullBackup }}"          
+    phases:
+    - func: KubeTask
+      name: checkAnnotations
+      args:
+        image: michaelcourcy/kasten-tools:7.5.1
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            echo "check if the annotations are present"
+            if [[ "null" == "$(kubectl get DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} -o json | jq -r '.metadata.annotations["kasten.io/numLogBackupsBeforeFullBackup"]')" ]]; then
+              echo "The annotation kasten.io/numLogBackupsBeforeFullBackup is missing set it up to 24."
+              kubectl annotate DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/numLogBackupsBeforeFullBackup=24
+            fi
+            if [[ "null" == "$(kubectl get DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} -o json | jq -r '.metadata.annotations["kasten.io/counterLogBackups"]')" ]]; then
+              echo "The annotation kasten.io/counterLogBackups is missing set it up to 0."
+              kubectl annotate DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=0
+            fi
+            # get the value of the annotations
+            numLogBackupsBeforeFullBackup=$(kubectl get DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} -o json | jq -r '.metadata.annotations["kasten.io/numLogBackupsBeforeFullBackup"]')
+            counterLogBackups=$(kubectl get DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} -o json | jq -r '.metadata.annotations["kasten.io/counterLogBackups"]')
+            # if numLogBackupsBeforeFullBackup is equal to counterLogBackups we should reset the counter
+            # for the final phase of the action if all previous phases were successfull
+            fullBackup=false
+            if [ $numLogBackupsBeforeFullBackup -le $counterLogBackups ]; then
+              fullBackup=true
+            fi
+            # kando output this values for the next phase
+            kando output fullBackup $fullBackup
+            kando output numLogBackupsBeforeFullBackup $numLogBackupsBeforeFullBackup
+            kando output counterLogBackups $counterLogBackups
+    - func: KubeExec
+      name: backupDatabase
+      objects:
+        mssqlSecret:
+          kind: Secret
+          name: mssql
+          namespace: '{{ .Object.metadata.namespace }}' 
+      args:
+        namespace: "{{ .Object.metadata.namespace }}"
+        pod: "{{ .Object.metadata.name }}-0"
+        container: mssql-tools
+        command:
+        - bash
+        - -x
+        - -o
+        - errexit
+        - -o
+        - pipefail
+        - -c
+        - |
+          # this depends on the load balancer that you created 
+          # using the listener is mandatory for ensuring we are working with the primary instance
+          HOST="dxemssql-cluster-lb,14033"
+          USER="sa"
+          PASSWORD="{{ index .Phases.backupDatabase.Secrets.mssqlSecret.Data "MSSQL_SA_PASSWORD" | toString }}"
+
+          # we need to know if we should reset the counter it means that we have to do a full backup
+          fullBackup={{ .Phases.checkAnnotations.Output.fullBackup }}
+          
+          # determine a non primary instance to backup the databases
+          PRIMARY_INSTANCE=$(/opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "SET NOCOUNT ON; SELECT @@servername" -b -s "," -h -1)
+          numInstances=$(({{ .Object.spec.synchronousReplicas }}-1))
+          NON_PRIMARY_INSTANCE="Not Defined"
+          for i in $(seq 0 $numInstances); do
+            INSTANCE={{ .Object.metadata.name }}-$i
+            if [ "$INSTANCE" != "$PRIMARY_INSTANCE" ]; then
+              NON_PRIMARY_INSTANCE=$INSTANCE
+              break
+            fi            
+          done
+          NON_PRIMARY_HOST=$NON_PRIMARY_INSTANCE
+          echo "Non primary instance selected: $NON_PRIMARY_INSTANCE"
+
+          # create a list of databases that are part of the availability group
+          databasesInAG=()
+          databases=$(/opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "SET NOCOUNT ON; SELECT name FROM sys.databases WHERE name NOT IN ('master','model','msdb','tempdb')" -b -s "," -h -1)
+          for database in $databases; do
+            inAvailabilityGroup=$(/opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "SET NOCOUNT ON; SELECT name FROM sys.databases WHERE name = '$database' AND replica_id IS NOT NULL" -b -s "," -h -1)
+            if [ -n "$inAvailabilityGroup" ]; then
+              echo "the database $database is part of the availability group"
+              databasesInAG+=($database)              
+            else
+              echo "The database $database is not part of the availability group."
+            fi
+          done
+
+          # if a database has been dropped or removed from the availability group we stop backing up the database
+          # and we don't want to maintain its folder in the backup directory
+          for folder in /backup/*; do
+            if [ -d "$folder" ]; then
+              database=$(basename "$folder")
+              if [[ ! " ${databasesInAG[@]} " =~ " ${database} " ]]; then
+                echo "Removing folder $folder because the database $database is not part of the availability group."
+                rm -rf $folder              
+              fi
+            fi
+          done
+
+          echo "loop on the databases that are part of the availability group and create a log backup in current directory" 
+          for database in "${databasesInAG[@]}"; do
+            echo "make sure database $database has a directory in the backup folder with a current subdirectory"
+            mkdir -p /backup/$database/current
+            echo "if there is a previous directory remove it" 
+            if [ -d "/backup/$database/previous" ]; then
+              rm -rf /backup/$database/previous
+              echo "/backup/$database/previous directory removed."
+            fi
+            echo "if there is already a full backup we should create a log backup"
+            if find "/backup/$database/current" -type f -name "*.bak" | grep -q .; then
+              echo "There is already a full backup for the database $database let's create a log backup."
+              /opt/mssql-tools/bin/sqlcmd -S $NON_PRIMARY_HOST -U $USER -P $PASSWORD -Q "BACKUP LOG $database TO DISK = '/backup/$database/current/$(date +"%Y-%m-%dT%H:%M:%S").trn'" -b
+            else
+              echo "No full backup found for the database $database let's create a full backup."
+              /opt/mssql-tools/bin/sqlcmd -S $NON_PRIMARY_HOST -U $USER -P $PASSWORD -Q "BACKUP DATABASE $database TO DISK = '/backup/$database/current/$(date +"%Y-%m-%dT%H:%M:%S").bak' WITH COPY_ONLY" -b
+            fi            
+            if [ $fullBackup == "true" ]; then
+              echo "We have reached the maximum number of log backups before a full backup we should move current to previous and create a new current directory with a full backup."
+              echo "We should move the current directory to previous and create a new current directory with a full backup."
+              mv /backup/$database/current /backup/$database/previous
+              mkdir -p /backup/$database/current
+              /opt/mssql-tools/bin/sqlcmd -S $NON_PRIMARY_HOST -U $USER -P $PASSWORD -Q "BACKUP DATABASE $database TO DISK = '/backup/$database/current/$(date +"%Y-%m-%dT%H:%M:%S").bak' WITH COPY_ONLY" -b              
+            fi
+          done
+    - func: KubeTask
+      name: updateAnnotations
+      args:
+        image: michaelcourcy/kasten-tools:7.5.1
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            # get the value from the checkAnnotations phase
+            fullBackup={{ .Phases.checkAnnotations.Output.fullBackup }}
+            numLogBackupsBeforeFullBackup={{ .Phases.checkAnnotations.Output.numLogBackupsBeforeFullBackup }}
+            counterLogBackups={{ .Phases.checkAnnotations.Output.counterLogBackups }}
+            # if we should reset the counter we should set it to 0
+            if [ $fullBackup == "true" ]; then
+              echo "We should reset the counter."
+              kubectl annotate DxEnterpriseSqlAg --overwrite -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=0
+            else
+              echo "We should increment the counter."
+              counterLogBackups=$((counterLogBackups+1))
+              kubectl annotate DxEnterpriseSqlAg --overwrite -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=$counterLogBackups
+            fi
+  restore:
+    inputArtifactNames:
+      - mssqlCloudDump
+    phases:
+    - func: KubeTask
+      name: waitForDXToBeReady
+      args:
+        image: michaelcourcy/kasten-tools:7.5.1
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            echo "check the presence of the configmap pit-restore in the namespace and get eventually its date value"
+            if kubectl get configmap -n {{ .Object.metadata.namespace }} pit-restore; then
+              pitDate=$(kubectl get configmap -n {{ .Object.metadata.namespace }} pit-restore -o json | jq -r '.data["date"]')
+              if [[ "null" == "$pitDate" ]]; then
+                echo "The configmap pit-restore is present but he has no date, this is an error. Either you remove the pit-restore configmap or you set a date in it."
+                exit 1
+              else
+                echo "The configmap pit-restore is present and its date is $pitDate"
+                kando output pitDate $pitDate
+              fi
+            else 
+              echo "The configmap pit-restore is not present we want to restore the whole restorepoint."
+              kando output pitDate "null"
+            fi
+            
+            timeout=300
+            while true; do
+              timeout=$((timeout-5))
+              expectedNumInstances=$(({{ .Object.spec.synchronousReplicas }}+{{ .Object.spec.asynchronousReplicas }}))
+              numReadyInstances=$(kubectl get pods -n {{ .Object.metadata.namespace }} -o json | jq '[.items[] | select(.status.conditions[] | select(.type == "Ready" and .status == "True"))] | length')
+              if [ $numReadyInstances -ge $expectedNumInstances ]; then
+                echo "All instances are ready."
+                echo "However wait for 90 secondes to ensure that each servers are really ready and not only the pods."
+                sleep 90 
+                exit 0
+              fi
+              sleep 5            
+            done
+            echo "Timed out waiting for all instances to be ready."
+            exit 1
+    - func: KubeExec
+      name: restoreDatabase
+      objects:
+        mssqlSecret:
+          kind: Secret
+          name: mssql
+          namespace: '{{ .Object.metadata.namespace }}' 
+      args:
+        namespace: "{{ .Object.metadata.namespace }}"
+        pod: "{{ .Object.metadata.name }}-0"
+        container: mssql-tools
+        command:
+        - bash
+        - -x
+        - -o
+        - errexit
+        - -o
+        - pipefail
+        - -c
+        - |
+          # this depends on the load balancer that you created 
+          # using the listener is mandatory for ensuring we are working with the primary instance
+          HOST="dxemssql-cluster-lb,14033"
+          AVAILABILITY_GROUP="{{ .Object.spec.availabilityGroupName }}"
+          USER="sa"
+          PASSWORD="{{ index .Phases.restoreDatabase.Secrets.mssqlSecret.Data "MSSQL_SA_PASSWORD" | toString }}"
+
+          pitDate={{ .Phases.waitForDXToBeReady.Output.pitDate }}
+          fullBackup={{ .ArtifactsIn.mssqlCloudDump.KeyValue.fullBackup }}
+          workDirectory="current"
+          if [[ ($fullBackup == "true") && ("$pitDate" != "null") ]]; then
+            echo "The pitDate is not null and log backup are in the previous directory we have to work with the previous directory."
+            workDirectory="previous"
+          fi
+
+          echo "Checking consistency of the backup folder"
+          for folder in /backup/*; do
+            if [ -d "$folder" ]; then
+              database=$(basename "$folder")
+              fullBackup=$(find /backup/$database/$workDirectory/ -type f -name "*.bak")
+              if [ -z $fullBackup ]; then
+                echo "No full backup found for the database $database in folder /backup/$database/$workDirectory/ we can't restore it."
+                exit 1
+              else
+                echo "Full backup found for the database $database in folder /backup/$database/$workDirectory/"
+              fi
+              fullBackupDate=$(basename $fullBackup)
+              fullBackupDate="${fullBackupDate%.*}"
+              if [[ "null" == "$pitDate" ]]; then
+                echo "No pitDate defined: we want to restore the database $database with the full backup and all the following log backups."
+              else
+                echo "We have a pitDate at $pitDate we want to restore the database $database at this time"
+                echo "Let's check that we have at least one log backup otherwise no PIT restore is possible"
+                logBackupCount=$(find /backup/$database/$workDirectory/ -type f -name "*.trn" | wc -l)
+                if [ $logBackupCount -eq 0 ]; then
+                  echo "No log backups found for the database $database in folder /backup/$database/$workDirectory/ we can't perform a PIT restore."
+                  echo "Maybe you choose the wrong restorepoint or this restorepoint was the first one (first restore point do not create log backup only a full backup)"
+                  exit 1
+                else
+                  echo "Log backups found in folder /backup/$database/$workDirectory"
+                fi
+                echo "Let's check that the pitDate $pitDate is not before the full backup or after the log backup"
+                if [[ "$pitDate" < "$fullBackupDate" ]]; then
+                  echo "The pitDate $pitDate is before the full backup date $fullBackupDate we can't restore the database $database at this time."    
+                  echo "Maybe you choose the wrong restorepoint"
+                  exit 1
+                else 
+                  echo "The pitDate $pitDate is after the full backup date $fullBackupDate we can continue checking the log backups."
+                fi
+                echo "Let's check if the pitDate is not after the last log backup"
+                logBackupDateAfterPitDate=false
+                logBackupDate="NotFound"
+                for logBackup in $(ls /backup/$database/$workDirectory/*.trn | sort); do
+                  logBackupDate=$(basename $logBackup)
+                  logBackupDate="${logBackupDate%.*}"
+                  if [[ "$logBackupDate" > "$pitDate" ]]; then
+                    echo "The log backup $logBackupDate is after the pitDate $pitDate we are good."
+                    logBackupDateAfterPitDate=true
+                    break
+                  fi
+                done
+                if [ $logBackupDateAfterPitDate == "false" ]; then
+                  echo "The pitDate $pitDate is after the last log backup date $logBackupDate we can't restore the database $database at this time."
+                  echo "Maybe you choose the wrong restorepoint"
+                  exit 1
+                fi
+              fi
+            fi
+          done
+          echo "The backup folder is fully consistent we can process all the restore"
+
+
+          echo "Now processing the restore of all the databases"
+          for folder in /backup/*; do
+            if [ -d "$folder" ]; then
+              database=$(basename "$folder")
+              echo "Handling the database $database"
+              fullBackup=$(find /backup/$database/$workDirectory/ -type f -name "*.bak")
+              echo "check if the database $database already exists"
+              exists=$(/opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "SET NOCOUNT ON; SELECT name FROM sys.databases WHERE name = '$database'" -b -s "," -h -1)
+              if [ -n "$exists" ]; then
+                echo "The database $database exist"
+                echo "check if the database $database is in the availability group, if yes remove it from the availability group $AVAILABILITY_GROUP because restoring a database that belongs to an availabilty group is impossible"
+                inAvailabilityGroup=$(/opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "SET NOCOUNT ON; SELECT name FROM sys.databases WHERE name = '$database' AND replica_id IS NOT NULL" -b -s "," -h -1)
+                if [ -n "$inAvailabilityGroup" ]; then
+                   echo "The database $database is belonging to the availability group removing it from the Availability group"
+                   /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "ALTER AVAILABILITY GROUP $AVAILABILITY_GROUP REMOVE DATABASE $database;" -b               
+                   echo "The database $database has been successfully removed from the availability group" 
+                fi
+              fi
+              echo "Restoring the full backup $fullBackup"
+              /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "RESTORE DATABASE $database FROM DISK = '$fullBackup' WITH REPLACE, NORECOVERY" -b
+              
+              echo "processing the log backups"
+              if [[ "null" == "$pitDate" ]]; then
+                echo "No pitDate defined: we want to restore all the log backups without STOPAT directive."
+                for logBackup in $(ls /backup/$database/$workDirectory/*.trn | sort); do
+                  echo "Restoring the log backup $logBackup"
+                  /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "RESTORE LOG $database FROM DISK = '$logBackup' WITH NORECOVERY" -b
+                done
+              else
+                for logBackup in $(ls /backup/$database/$workDirectory/*.trn | sort); do
+                  logBackupDate=$(basename $logBackup)
+                  logBackupDate="${logBackupDate%.*}"
+                  if [[ "$logBackupDate" > "$pitDate" ]]; then
+                    echo "The log backup $logBackupDate is after the pitDate $pitDate this restore will include the STOPAT directive."
+                    /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "RESTORE LOG $database FROM DISK = '$logBackup' WITH STOPAT = '$pitDate', NORECOVERY" -b
+                    break
+                  else
+                    echo "The log backup $logBackupDate is before the pitDate $pitDate this restore will not include the STOPAT directive."
+                    /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "RESTORE LOG $database FROM DISK = '$logBackup' WITH NORECOVERY" -b
+                  fi
+                done
+              fi
+              echo "Setting the database $database in full recovery mode"
+              /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "RESTORE DATABASE $database WITH RECOVERY" -b
+              /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "ALTER DATABASE $database SET RECOVERY FULL" -b
+             
+              echo "Re-adding the database to the availability group"
+              /opt/mssql-tools/bin/sqlcmd -S $HOST -U $USER -P $PASSWORD -Q "ALTER AVAILABILITY GROUP $AVAILABILITY_GROUP ADD DATABASE $database;" -b            
+            fi
+          done
+          echo "All the databases were fully restored"
+

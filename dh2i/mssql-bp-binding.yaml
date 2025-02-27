@@ -1,0 +1,20 @@
+apiVersion: config.kio.kasten.io/v1alpha1
+kind: BlueprintBinding
+metadata:
+  name: mssql-bp-binding  
+  namespace: kasten-io
+spec:
+  blueprintRef:
+    name: mssql-bp
+    namespace: kasten-io
+  resources:
+    matchAll:
+    - type:
+        operator: In
+        values:
+        - group: dh2i.com
+          resource: dxenterprisesqlags
+    # allow the blueprint to be applied to resources that do not have the annotation
+    - annotations:
+        key: kanister.kasten.io/blueprint
+        operator: DoesNotExist
