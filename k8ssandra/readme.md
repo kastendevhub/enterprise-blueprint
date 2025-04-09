@@ -29,7 +29,7 @@ Make sure you understand the limitations of this architecture reference:
 
 - PIT restore is not implemented but this is not because of cassandra limitation, we made this choice because on the field we observe that incremental backup was enough and we wanted to avoid increasing the complexity of the blueprint
 - In the same namespace datancenters will be backed up sequentially. We recommend one datacenter per namespace and use kasten to parrallelize backups.
-- Similar to the previous we support the backup of CassandraDatacenter but not the backup of K8ssandraCluster. The blueprint will discover and protect CassandraDatacenter even if they are created by a K8ssandraCluster
+- Similar to the previous we support the backup of CassandraDatacenter but not the backup of K8ssandraCluster. The blueprint will discover and protect CassandraDatacenter even if they are created by a K8ssandraCluster. We did not test if the K8ssandraCluster will not try to overwrite the annotations put by the blueprint.
 
 # Architecture diagrams
 
