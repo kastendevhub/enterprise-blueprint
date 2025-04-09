@@ -12,7 +12,7 @@ An architecture reference that explains how to use the cass-operator (k8ssandra)
 |-----------------------------------------------|----------------------------------|---------------------------|
 | Database                                      | cassandra                        |                           | 
 | Database version tested                       | cassandra 4.0.1                  |                           |
-| Operator vendor                               | Datastax                         | License required DSE that open enterprise support |
+| Operator vendor                               | Datastax                         | License required for DSE  |
 | Operator vendor validation                    | In progress                      |                           |
 | Operator version tested                       | helm version 0.41.1 cassandra operator version v1.15.0 |     |
 | High Availability                             | Yes by design                    | Cassandra is an active active data service that feature data replication |
@@ -20,7 +20,7 @@ An architecture reference that explains how to use the cass-operator (k8ssandra)
 | PIT (Point In Time) supported                 | No                               | But we support incremental backup that can give you a 5 mins RTO even on a very big database  |
 | Blueprint and BlueprintBinding example        | Yes                              |                           |
 | Blueprint actions                             | Backup & restore                 | Delete is done through restorepoint deletion as backup artifacts are living in their own PVC (one PVC per node) |
-| Backup performance impact on the database     | Only at full snapshot not incremental | see [architecture diagrams](#architecture-diagrams) |
+| Backup performance impact on the database     | Full backup have much bigger impacts than incremental | see [architecture diagrams](#architecture-diagrams) |
 
 
 # Limitations 
