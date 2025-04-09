@@ -201,7 +201,7 @@ And [cassandra_after_backup.sh](./scripts/cassandra_after_backup.sh)
 ```
 bash ./scripts/cassandra_after_backup.sh cass-operator
 ```
-This part of the script will only handle the incremental counter annotation and is executed if the all the previous steps are successfull. 
+This part of the script will only handle the incremental counter annotation and is executed if all the previous steps are successfull. 
 
 Those scripts has been ported in the blueprint [cassandradatacenter-bp.yaml](./cassandradatacenter-bp.yaml) under the respective `beforeBackup` and `afterBackup` action.
 
