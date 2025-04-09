@@ -122,7 +122,7 @@ where you can define replication strategy between CassandraDatacenter in a CR ca
 > Kasten comes with a built in blueprint that leverage **Medusa** (the backup tool for k8ssandra) but we don't use it because we want fast and granular restore based on snapshot and `Medusa`is not 
 > available with just the `cassandra operator`
 
-When you install k8ssandra operator it automatically install cassandra operator. Cassandra operator (known as cass-operator) is included in k8ssandra operator. But you can also install cassandra operator without k8ssandra operator, in this case you create single a CassandraDatacenter CRD.
+When you install k8ssandra operator it automatically install cassandra operator. Cassandra operator (known as cass-operator) is included in k8ssandra operator. But you can also install cass-operator without k8ssandra operator, that's what we're going to do in this guide.
 
 You can also install k8ssandra operator and never create a K8ssandraCluster CR but only CassandraDatacenter CR.
 
