@@ -33,7 +33,7 @@ We provide architectural references for integrating Kasten with the following da
 - MySQL/Percona
 - Kafka/Strimzi
 - Kafka/Confluent
-- Cassandra
+- [Cassandra/K8ssandra](./k8ssandra/)
 
 ## Five Principles Guiding Enterprise Blueprints
 
