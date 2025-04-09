@@ -28,7 +28,7 @@ An architecture reference that explains how to use the cass-operator (k8ssandra)
 Make sure you understand the limitations of this architecture reference:
 
 - PIT restore is not implemented but this is not because of cassandra limitation, we made this choice because on the field we observe that incremental backup was enough and we wanted to avoid increasing the complexity of the blueprint
-- We do not coordonate the backups of multiple datacenter, even if with blueprintbinding we apply the same blueprint for each datancenter that we backup we do not try to coordonate them. For instance you may have 2 datacenters in the same namespace we will apply the same blueprint but there is no way to backup one before the other. Most of the time Kasten will back them up in parrallel launching 2 concurrent actionsets.
+- In the same namespace datancenters will be backed up sequentially. We recommend one datacenter per namespace and use kasten to parrallelize backups.
 - Similar to the previous we support the backup of CassandraDatacenter but not the backup of K8ssandraCluster. The blueprint will discover and protect CassandraDatacenter even if they are created by a K8ssandraCluster
 
 # Architecture diagrams
