@@ -1,0 +1,22 @@
+apiVersion: config.kio.kasten.io/v1alpha1
+kind: BlueprintBinding
+metadata:
+  name: mongodb-ent-bp-binding  
+spec:
+  blueprintRef:
+    name: mongodb-ent-bp
+    namespace: kasten-io
+  resources:
+    matchAll:
+    - type:
+        operator: In
+        values:
+        - group: mongodb.com
+          resource: mongodb
+    # allow the blueprint to be applied to resources that do not have the annotation
+    - annotations:
+        key: kanister.kasten.io/blueprint
+        operator: DoesNotExist
+    - annotations:
+        key: kanister.kasten.io/mongo-backup-disabled
+        operator: DoesNotExist        

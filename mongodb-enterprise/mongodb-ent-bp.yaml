@@ -1,0 +1,135 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata: 
+  name: mongodb-ent-bp
+actions:
+  backup:
+    outputArtifacts:
+      mongoSnap:
+        keyValue:
+          backupEnabled: '{{ .Phases.snapshotOnDemand.Output.backupEnabled }}'
+          baseUrl: '{{ .Phases.snapshotOnDemand.Output.baseUrl }}'
+          projectId: '{{ .Phases.snapshotOnDemand.Output.projectId }}'
+          clusterId: '{{ .Phases.snapshotOnDemand.Output.clusterId }}'
+          snapshotId: '{{ .Phases.snapshotOnDemand.Output.snapshotId }}'
+    phases:
+    - func: KubeTask
+      name: snapshotOnDemand
+      objects:
+        backupAdminSecret:
+          kind: Secret
+          name: 'mongodb-backup-admin'
+          namespace: 'kasten-io' 
+      args:        
+        image: michaelcourcy/kanister-tools:0.112.0
+        command:
+        - bash
+        - -x
+        - -o
+        - errexit
+        - -o
+        - pipefail
+        - -c
+        - |                     
+          backupEnabled="{{ .Object.spec.backup.mode }}"
+          if [[ $backupEnabled == "enabled" ]]
+          then 
+            echo "Backup is enabled for this cluster processing the backup"
+          else
+            echo "Backup is not enabled for this cluster, to not fail the kasten job annotate the mongodb resource with kanister.kasten.io/mongo-backup-disabled=true"
+            echo "so that the blueprintdinding won't be applied to this resource"
+            exit 1
+          fi
+          # obtain base url and projectId from the .status.link
+          link="{{ .Object.status.link }}"
+          baseUrl=$(echo "$link" | awk -F'/v2/' '{print $1}')
+          projectId=$(echo "$link" | awk -F'/v2/' '{print $2}')
+          publicKey="{{ index .Phases.snapshotOnDemand.Secrets.backupAdminSecret.Data "user" | toString }}"
+          privateKey="{{ index .Phases.snapshotOnDemand.Secrets.backupAdminSecret.Data "publicApiKey" | toString }}"
+
+          echo "obtain the clusterId. There is only one cluster per project when using kubernetes operator, we take no risk in taking the first element in the array"
+          clusterId=$(curl --user "$publicKey:$privateKey" --digest \
+              --header "Accept: application/json" \
+              --request GET "$baseUrl/api/public/v1.0/groups/$projectId/clusters" |jq -r ".results[0].id")
+          echo "create on demand snapshot and record the timestamp of the request, retention is long (1000 days) because we'll give to kasten the responsability to delete this snapshot" 
+          snapshotRequestTimestamp=$(curl --user "$publicKey:$privateKey" \
+              --digest  \
+              --header "Accept: application/json" \
+              --request POST $baseUrl/api/public/v1.0/groups/$projectId/clusters/$clusterId/snapshots/onDemandSnapshot?retentionDays=1000|jq -r ".timestamp.time")
+
+          echo "we wait for a snapshot to be complete and created after the snapshotRequestTimestamp"          
+          timeout=1800 
+          wait=0
+          sleepIncrement=3
+          timeout=$((timeout+sleepIncrement))
+          while true; 
+          do 
+            response=$(curl --user "$publicKey:$privateKey" --digest \
+              --header "Accept: application/json" \
+              --request GET $baseUrl/api/public/v1.0/groups/$projectId/clusters/$clusterId/snapshots)
+            snap=$(echo "$response" | jq --arg ts "$snapshotRequestTimestamp" '.results[] | select(.created.time > ($ts | tonumber) and .complete == true) | length')
+            if [ -z "$snap" ]
+            then
+              echo "snapshot not ready yet "
+              wait=$((wait+sleepIncrement))
+              if [ "$wait" -gt "$timeout" ]
+              then 
+                echo "timeout $timeout has been reached"
+                echo "showing the list of snapshots already listed in $baseUrl/api/public/v1.0/groups/$projectId/clusters/$clusterId/snapshots"
+                echo $response | jq
+                exit 1
+              else
+                echo "waiting $((timeout-wait)) seconds"
+              fi
+              sleep $sleepIncrement
+            else
+              echo "snapshot ready"
+              snapshotId=$(echo "$response" | jq -r --arg ts "$snapshotRequestTimestamp" '.results[] | select(.created.time > ($ts | tonumber) and .complete == true) | .id')
+              echo "snapshot id $snapshotId"
+              break
+            fi
+          done
+          kando output backupEnabled $backupEnabled
+          kando output baseUrl $baseUrl
+          kando output projectId $projectId
+          kando output clusterId $clusterId
+          kando output snapshotId $snapshotId
+  delete:
+    inputArtifactNames: 
+    - mongoSnap  
+    phases:         
+    - func: KubeTask
+      name: deleteSnapshot
+      objects:
+        backupAdminSecret:
+          kind: Secret
+          name: 'mongodb-backup-admin'
+          namespace: 'kasten-io'  
+      args:        
+        image: michaelcourcy/kanister-tools:0.112.0
+        command:
+        - bash
+        - +x
+        - -o
+        - errexit
+        - -o
+        - pipefail
+        - -c
+        - |
+          backupEnabled="{{ .ArtifactsIn.mongoSnap.KeyValue.backupEnabled }}"
+          baseUrl="{{ .ArtifactsIn.mongoSnap.KeyValue.baseUrl }}"
+          projectId="{{ .ArtifactsIn.mongoSnap.KeyValue.projectId }}"
+          clusterId="{{ .ArtifactsIn.mongoSnap.KeyValue.clusterId }}"
+          snapshotId="{{ .ArtifactsIn.mongoSnap.KeyValue.snapshotId }}"
+          publicKey="{{ index .Phases.deleteSnapshot.Secrets.backupAdminSecret.Data "user" | toString }}"
+          privateKey="{{ index .Phases.deleteSnapshot.Secrets.backupAdminSecret.Data "publicApiKey" | toString }}"
+          if [[ $backupEnabled == "enabled" ]]
+          then 
+            echo "Backup is enabled for this cluster processing the deletion of the snapshot"
+          else
+            echo "Backup is not enabled for this cluster, nothing to do"
+            exit 0
+          fi
+          curl --user "$publicKey:$privateKey" --digest \
+              --header "Accept: application/json" \
+              --request DELETE $baseUrl/api/public/v1.0/groups/$projectId/clusters/$clusterId/snapshots/$snapshotId

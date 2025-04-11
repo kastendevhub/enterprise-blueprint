@@ -25,7 +25,7 @@ We provide architectural references for integrating Kasten with the following da
 
 - [MSSQL/DH2I](./dh2i/)
 - Elasticsearch
-- MongoDB/Mongo-Enterprise
+- [MongoDB/Mongo-Enterprise](./mongodb-enterprise/)
 - MongoDB/Percona
 - [PostgreSQL/EDB](./edb)
 - PostgreSQL/Crunchy
