@@ -1,4 +1,4 @@
-# EDB Kasten Integration
+# Architecture Reference for Using EDB Operator with Kasten by Veeam
 
 ## Goals
 
