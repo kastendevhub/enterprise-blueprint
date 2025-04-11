@@ -564,8 +564,11 @@ metadata:
     kasten.io/counterLogBackups: 0
 ```
 
-You can setup and even change the value of `kasten.io/numLogBackupsBeforeFullBackup` when creating the object DxEnterpriseSqlAg or 
-when installing the blueprint but you should not change or setup the value of `kasten.io/counterLogBackups` because this annotation is managed by the blueprint.
+We do a full backup if :
+- the annotation `kasten.io/counterLogBackups`is not defined OR
+- the value of `kasten.io/counterLogBackups`is greater or equal to the value of `kasten.io/numLogBackupsBeforeFullBackup` and we reset `kasten.io/counterIncrementalBackups` to zero
+
+So if you want to trigger a full backup you just have to remove the `kasten.io/counterIncrementalBackups` annotation
 
 ## Let's work on a frequency instance to better understand 
 

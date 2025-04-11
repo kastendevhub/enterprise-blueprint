@@ -9,7 +9,7 @@ actions:
       mssqlCloudDump:
         keyValue:
           numLogBackupsBeforeFullBackup: "{{ .Phases.checkAnnotations.Output.numLogBackupsBeforeFullBackup }}"
-          counterLogBackups: "{{ .Phases.checkAnnotations.Output.counterLogBackups }}"
+          counterLogBackups: "{{ .Phases.updateAnnotations.Output.counterLogBackups }}"
           fullBackup: "{{ .Phases.checkAnnotations.Output.fullBackup }}"          
     phases:
     - func: KubeTask
@@ -29,9 +29,15 @@ actions:
               echo "The annotation kasten.io/numLogBackupsBeforeFullBackup is missing set it up to 24."
               kubectl annotate DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/numLogBackupsBeforeFullBackup=24
             fi
-            if [[ "null" == "$(kubectl get DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} -o json | jq -r '.metadata.annotations["kasten.io/counterLogBackups"]')" ]]; then
+            fullBackup=false
+            counterAnnotation=$(kubectl get DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} -o json | jq -r '.metadata.annotations["kasten.io/counterLogBackups"]')
+            echo "counterAnnotation: $counterAnnotation"
+            if [[ "null" == "$counterAnnotation" ]]; then
               echo "The annotation kasten.io/counterLogBackups is missing set it up to 0."
               kubectl annotate DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=0
+              fullBackup=true
+            else 
+              echo "The annotation kasten.io/counterLogBackups is present."
             fi
             # get the value of the annotations
             numLogBackupsBeforeFullBackup=$(kubectl get DxEnterpriseSqlAg -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} -o json | jq -r '.metadata.annotations["kasten.io/numLogBackupsBeforeFullBackup"]')
@@ -158,12 +164,13 @@ actions:
             # if we should reset the counter we should set it to 0
             if [ $fullBackup == "true" ]; then
               echo "We should reset the counter."
-              kubectl annotate DxEnterpriseSqlAg --overwrite -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=0
+              counterLogBackups=0
             else
               echo "We should increment the counter."
               counterLogBackups=$((counterLogBackups+1))
-              kubectl annotate DxEnterpriseSqlAg --overwrite -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=$counterLogBackups
             fi
+            kubectl annotate DxEnterpriseSqlAg --overwrite -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=$counterLogBackups
+            kando output counterLogBackups $counterLogBackups
   restore:
     inputArtifactNames:
       - mssqlCloudDump
