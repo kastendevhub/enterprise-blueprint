@@ -346,6 +346,8 @@ Now we can add the database to the availability group
   - When it’s time for a new full backup, `current` is renamed to `previous`, and a new `current` is created.  
   - Only the most recent backup chain is maintained to control storage growth.
 
+  ![Storage organization](./images/restorepoints.png)
+
 - **Annotation-Based Control:**  
   Annotations such as `kasten.io/numLogBackupsBeforeFullBackup` and `kasten.io/counterLogBackups` control when a full backup is triggered versus a log backup.
 
@@ -356,6 +358,11 @@ Now we can add the database to the availability group
 
 - **Point in Time (PIT) Restore:**  
   For PIT restore, delete and recreate the target namespace, then create a ConfigMap (named `pit-restore`) with the desired UTC restore time. The blueprint automatically selects the correct backup chain based on this timestamp.
+  ```
+  kubectl create configmap pit-restore --from-literal=date='2025-02-12T04:32:12' 
+  ```
+
+  > Don't forget to delete this configmap at the end of the restore.
 
 ## Additional Considerations
 
@@ -380,7 +387,9 @@ Now we can add the database to the availability group
    These resources ensure that when Kasten backs up a DxEnterpriseSqlAg object, the blueprint is applied.
 
 2. **Configure Your Backup Policy:**  
-   Use your backup policy to include exclude filters (such as excluding PVCs with the label `dh2i.com/entity:dxesqlag`) and the necessary backup/restore hooks.
+   Use your backup policy to include exclude filters (such as excluding PVCs with the label `dh2i.com/entity:dxesqlag`) 
+   ![Filters](./images/label-pvc-exclude-filter.png)
+   
 
 ## Testing and Troubleshooting
 
