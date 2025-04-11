@@ -1,265 +1,219 @@
-# EDB Kasten integration 
+# EDB Kasten Integration
 
 ## Goals
 
-The goal of this project is to show how Kasten can be used with the EDB external backup adapter to create fast and consistent backup for EDB cluster.
+This project demonstrates how to use Kasten with the EDB external backup adapter to create fast, consistent backups for an EDB cluster.
 
-The [external backup adapter](https://www.enterprisedb.com/docs/postgres_for_kubernetes/latest/addons/) create through annotations or labels a way for third party tool as Kasten to discover the api that they have to invoke to take a safe storage backup. 
+The [external backup adapter](https://www.enterprisedb.com/docs/postgres_for_kubernetes/latest/addons/) leverages annotations or labels to expose an API that third-party tools (such as Kasten) can invoke to perform a safe backup. This design takes full advantage of Kasten’s data management features to back up PVCs (with fully incremental and portable snapshots) while using the EDB API to obtain consistent backups of large clusters.
 
-This approach take full advantage of the Kasten data management for backing up pvc (snapshot are fully incremental and portable) and using EDB API to take consistent backup of large clusters.
+## Architecture Card
 
-## Architecture card
+| Description                                   | Values                           | Comment                                    |
+|-----------------------------------------------|----------------------------------|--------------------------------------------|
+| **Database**                                  | Postgres                         | One primary, two replicas                  |
+| **Database version tested**                   | Postgres 15.3                    |                                            |
+| **Operator vendor**                           | [EDB](https://edb.com)           | License required                           |
+| **Operator vendor validation**                | Fully validated                  |                                            |
+| **Operator version tested**                   | 1.20.2                           |                                            |
+| **High Availability**                         | Yes                              |                                            |
+| **Unsafe backup & restore without pod errors**| Yes                              | See [Unsafe backup and restore](../#unsafe-backup-and-restore) |
+| **PIT (Point in Time) support**               | No                               | See [limitations](#limitations) for RPO considerations |
+| **Blueprint and BlueprintBinding example**    | Yes                              |                                            |
+| **Blueprint actions**                         | Backup & Restore                 | Deletion is implemented via restorepoint deletion since backup artifacts reside on a shared PVC |
+| **Backup performance impact**                 | None                             | Backups run on the secondary replica and do not affect the primary |
 
+## Limitations
 
-| Description                                   | Values                           | Comment                   |
-|-----------------------------------------------|----------------------------------|---------------------------|
-| Database                                      | Postgres                         | One primary 2 replicas    | 
-| Database version tested                       | Postgres 15.3                    |                           |
-| Operator vendor                               | [EDB](https://edb.com)           | License required          |
-| Operator vendor validation                    | Fully vallidated                 |                           |
-| Operator version tested                       | 1.20.2                           |                           |
-| High Availability                             | Yes                              |                           |
-| Unsafe backup & restore without pods errors   | Yes                              | See [unsafe backup and restore](#unsafe-backup-and-restore) section |
-| PIT (Point In Time) supported                 | No                               | See the [limitation](#limitations) section for RPO consideration |
-| Blueprint and BlueprintBinding example        | Yes                              |                           |
-| Blueprint actions                             | Backup & restore                 | Delete is done through restorepoint deletion as backup artifacts are living in a shared PVC |
-| Backup performance impact on the database     | None                             | Backup is done on secondary replica which has no impact on the primary database |
+- This blueprint does not support point-in-time recovery.
+- It does not implement incremental backup at the database level (though storage-level backups are incremental).
 
+## How It Works
 
-# Limitations 
+1. The EDB backup adapter applies annotations/labels on one of the replicas (not the primary) to specify the command required to switch the replica into backup mode (referred to as “fenced” in EDB terminology).
+2. The Kasten pre-backup hook blueprint discovers this replica and calls the EDB pre-backup command on it. At this point, the replica is "fenced," and its PVC is in a fully consistent state for backup.
+3. Kasten proceeds with the backup for the entire namespace following the configured policy. The policy excludes PVCs that carry the label `kasten-enterprisedb.io/excluded: "true"`, so only the PVC of the fenced replica is captured.
+4. After the backup, the Kasten post-backup hook blueprint calls the EDB post-backup command to “unfence” the replica and return it to normal operation.
+5. When Kasten restores the namespace, the EDB operator detects the PVC of the fenced replica, promotes it to primary, and rebuilds the remaining replica instances from it.
 
-Make sure you understand the limitations of this architecture reference:
+Below is a series of diagrams illustrating the workflow:
 
-- This blueprint does not support point in time recovery 
-- This blueprint dose not propose incremental backup at the database level but is incremental at the storage level
+### Regular Operation
+![Regular Operation](./images/regular-run.png)
 
-## How it works 
+### Before Snapshot
+When Kasten launches a backup, it first issues the command to "fence" a replica. This ensures that the primary instance remains unaffected and that transactions continue uninterrupted. The fencing process ensures a consistent snapshot of the replica’s PVC.
 
-1. The EDB Backup adapter will put the annotations/labels on one of the replicas (not the primary) that has the commands to switch on backup mode (in EDB terms to be `fenced`)
-2. Kasten prebackup hook blueprint discover this replica and call the EDB pre-backup command on it, now the replica is `fenced` and its PVC is fully consistent for a backup
-3. Kasten proceed the backup of the complete namespace as usual but we configure the policy to exclude the PVC having the label `kasten-enterprisedb.io/excluded: "true"`, only the PVC of the `fenced` replica will be captured, the other's PVC instance will be exluded of the backup.
-4. Kasten postbackup hook blueprint call the EDB post-backup commands, the elected replica is `unfenced` and back in a "normal" mode
-5. When Kasten restore the namespace, the EDB operator discover the pvc of the `fenced` replica and use it as the primary for the EDB cluster, it recreates the other replica instances from it.
+![Before Snapshot](./images/before-snapshot.png)
 
-![Workflow diagram](./images/edb-backup-adapter.drawio.png)
+### After Snapshot
+Once the snapshot is complete, the replica is "unfenced" and catches up with any transactions missed during fencing.
 
-## Backup and restore workflow 
+![After Snapshot](./images/after-snapshot.png)
 
-In it's regular run EDB manages the postgres cluster ensuring there is always one primary (read-write) and 2 replicas (read-only) to handle failover scenarios.
+### Restore Process
+During restore, Kasten restores the fenced PVC. Once restoration is complete, the operator promotes that replica to primary, and two read-only replicas are recreated from it.
 
-![regular run](./images/regular-run.png)
+![At Restore](./images/at-restore.png)
 
-When Kasten launch the backup it calls the command to "Fence" one of the replica. It means that the primary instance is not affected and all the transactions can continue on the primary. Customer won't notice any downtime or performance drop because of the backup ! 
+## Getting Started
 
-![Before snapshot](./images/before-snapshot.png)
+### Install the Operator
 
-When an instance is "fenced" , EDB guarantees consistency by committing all transactions to the database. This ensures that the backups taken by Kasten is a full consistent snapshot of the database.
+If you haven’t already installed the EDB operator on your Kubernetes cluster, run:
 
-When the snapshot of the "fenced" instance is complete, Kasten will "unfence" and the replica catches up with the last transaction that was missed during the fencing.
-
-![After snapshot](./images/after-snapshot.png)
-
-During restore, Kasten restores the PVC that was fenced, and when complete the operator promotes it as a primary instance. Two read replicas are then created from the primary.
-
-![At restore](./images/at-restore.png)
-
-# Getting Started 
-## Install the operator 
-
-If you already have EDB operator installed on kubernetes you can skip this part  
-
-```
+```bash
 kubectl apply -f https://get.enterprisedb.io/cnp/postgresql-operator-1.20.2.yaml
 ```
 
-This will create the operator namespace where the controller will be running.
+This command creates the operator's namespace and deploys the controller.
 
-## Create an EDB cluster, a client and some data 
+### Create an EDB Cluster, Client, and Data
 
+Create a new namespace and deploy your EDB cluster:
 
-```
+```bash
 kubectl create ns edb
 kubectl apply -f cluster-example.yaml -n edb
 ```
 
-Wait for the cluster to be fully ready.
-```
+Wait until the cluster is fully ready:
+
+```bash
 kubectl get clusters.postgresql.k8s.enterprisedb.io -n edb
+```
+
+Example output:
+
+```
 NAME              AGE   INSTANCES   READY   STATUS                     PRIMARY
 cluster-example   19m   3           3       Cluster in healthy state   cluster-example-1
 ```
 
+Install the CNP plugin (if not already installed):
 
-Install the cnp plugin if you haven't it yet 
-```
-curl -sSfL \
-  https://github.com/EnterpriseDB/kubectl-cnp/raw/main/install.sh | \
-  sudo sh -s -- -b /usr/local/bin
+```bash
+curl -sSfL https://github.com/EnterpriseDB/kubectl-cnp/raw/main/install.sh | sudo sh -s -- -b /usr/local/bin
 ```
 
-Create a client certificate to the database
-```
-kubectl cnp certificate cluster-app \
-  --cnp-cluster cluster-example \
-  --cnp-user app \
-  -n edb 
+Create a client certificate for your database:
+
+```bash
+kubectl cnp certificate cluster-app --cnp-cluster cluster-example --cnp-user app -n edb
 ```
 
-Now you can create the client 
-```
-kubectl create -f client.yaml -n edb 
+Deploy your client:
+
+```bash
+kubectl create -f client.yaml -n edb
 ```
 
-Create some data 
-```
+Load initial data:
+
+```bash
 kubectl exec -it deploy/cert-test -- bash
-psql " $DATABASE_URL "
+psql "$DATABASE_URL"
 \c app
 DROP TABLE IF EXISTS links;
 CREATE TABLE links (
-	id SERIAL PRIMARY KEY,
-	url VARCHAR(255) NOT NULL,
-	name VARCHAR(255) NOT NULL,
-	description VARCHAR (255),
-        last_update DATE
+    id SERIAL PRIMARY KEY,
+    url VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description VARCHAR(255),
+    last_update DATE
 );
-INSERT INTO links (url, name, description, last_update) VALUES('https://kasten.io','Kasten','Backup on kubernetes',NOW());
-select * from links;
+INSERT INTO links (url, name, description, last_update) VALUES('https://kasten.io','Kasten','Backup on Kubernetes',NOW());
+SELECT * FROM links;
 \q
 exit
 ```
 
-## Add the backup decorator annotations to the cluster 
+### Configure the Backup Annotations
 
-You can skip this part if you create the cluter from the previous section because with [cluster-example-2](./cluster-example-2.yaml) the cluster-example already include the kasten addon.
+If you created your cluster using `cluster-example.yaml`, the cluster already includes the Kasten addon. If not, add the following annotation to your cluster CR:
 
-If you have not it yet just had this annotation in your cluster CR 
+```yaml
+"k8s.enterprisedb.io/addons": '["kasten"]'
 ```
-    "k8s.enterprisedb.io/addons": '["kasten"]'
-```
 
-If your version of EDB is old and does not support the kasten addons you can create all the annotations and labels manually 
-you have an example in [cluster-example.yaml ](./cluster-example.yaml). 
+For older versions of EDB that do not natively support the Kasten addons, refer to the example in [cluster-example.yaml](./cluster-example.yaml) and manually add the required annotations and labels.
 
+### Install the EDB Blueprint
 
-## Install the edb blueprint
-
-```
+```bash
 kubectl create -f edb-hooks.yaml
 ```
 
-## Create a backup policy with the exclude filters and the hooks 
+### Create a Backup Policy with Exclude Filters and Hooks
 
-Create a Kasten policy for the edb namespace: set up a location profile for export and kanister actions. 
+Define a Kasten policy for the `edb` namespace by setting up a location profile for export and Kanister actions.
 
-### Add the exlude filters :
+#### Add the Exclude Filters
 
-```
-kasten-enterprisedb.io/excluded:true
-```
+Set the following label to exclude PVCs that should not be backed up:
 
-![PVC exclude filters](./images/exclude-filters.png)
-
-
-### Add the hooks :
-
-![Policy hooks](./images/policy-hooks.png)
-
-
-## Launch a backup 
-
-Launch a backup, that will create 2 restorepoints a local and a remote.
-
-![Launch a backup](./images/launch-a-backup.png)
-
-When you'll visit the restore point you'll see that only one PVC has been taken then one that map to 
-the `fenced` instance.
-
-![Only one pvc has been backed up](./images/only-one-pvc-backed-up.png)
-
-## Let's test a restore
-
-Delete the namespace edb 
-
-```
-kubectl delete ns edb
+```yaml
+kasten-enterprisedb.io/excluded: "true"
 ```
 
-## Restore 
+![PVC Exclude Filters](./images/exclude-filters.png)
 
-Because you deleted the namespace all the volumesnaphot are gone hence you need to restore from the external
-location profile.
+#### Add the Hooks
 
-![Choose exported](./images/choose-exported.png)
+Configure the backup and restore hooks in the policy.
 
-Just click restore and wait for the EDB cluster to restart.
+![Policy Hooks](./images/policy-hooks.png)
 
-You should see pod cluster-example-2 immediatly starting (without initialization of the database) and the cluster-example-3 and cluster-example-4 joining.
+### Launch a Backup
 
-```
-kubectl get po -n edb -w
-NAME                         READY   STATUS     RESTARTS   AGE
-cert-test-5dcf5cb6b8-fhf4m   1/1     Running    0          3s
-cluster-example-2            0/1     Init:0/1   0          1s
-cluster-example-2            0/1     PodInitializing   0          3s
-cluster-example-2            0/1     Running           0          4s
-cluster-example-2            1/1     Running           0          5s
-cluster-example-2            1/1     Running           0          5s
-cluster-example-3-join-vm6d9   0/1     Pending           0          0s
-cluster-example-3-join-vm6d9   0/1     Pending           0          5s
-cluster-example-3-join-vm6d9   0/1     Init:0/1          0          5s
-cluster-example-3-join-vm6d9   0/1     PodInitializing   0          10s
-cluster-example-3-join-vm6d9   1/1     Running           0          11s
-cluster-example-3-join-vm6d9   0/1     Completed         0          13s
-cluster-example-3-join-vm6d9   0/1     Completed         0          15s
-cluster-example-3-join-vm6d9   0/1     Completed         0          16s
-cluster-example-3              0/1     Pending           0          0s
-cluster-example-3              0/1     Pending           0          0s
-cluster-example-3              0/1     Init:0/1          0          0s
-cluster-example-3              0/1     PodInitializing   0          4s
-cluster-example-3              0/1     Running           0          5s
-cluster-example-3              0/1     Running           0          5s
-cluster-example-3              1/1     Running           0          6s
-cluster-example-4-join-rtpxf   0/1     Pending           0          0s
-cluster-example-4-join-rtpxf   0/1     Pending           0          5s
-cluster-example-4-join-rtpxf   0/1     Init:0/1          0          5s
-cluster-example-4-join-rtpxf   0/1     PodInitializing   0          9s
-cluster-example-4-join-rtpxf   0/1     Completed         0          10s
-cluster-example-4-join-rtpxf   0/1     Completed         0          12s
-cluster-example-4-join-rtpxf   0/1     Completed         0          13s
-cluster-example-4              0/1     Pending           0          0s
-cluster-example-4              0/1     Pending           0          0s
-cluster-example-4              0/1     Init:0/1          0          0s
-cluster-example-4              0/1     PodInitializing   0          6s
-cluster-example-4              0/1     Running           0          7s
-cluster-example-4              0/1     Running           0          7s
-cluster-example-4              1/1     Running           0          8s
-cluster-example-4-join-rtpxf   0/1     Terminating       0          21s
-cluster-example-3-join-vm6d9   0/1     Terminating       0          43s
-cluster-example-4-join-rtpxf   0/1     Terminating       0          21s
-cluster-example-3-join-vm6d9   0/1     Terminating       0          43s
-cluster-example-3              1/1     Running           0          28s
-cluster-example-2              1/1     Running           0          50s
-cluster-example-4              1/1     Running           0          9s
-```
+Trigger a backup which will create two restore points: a local and a remote one.
 
-### Check your data are back.
+![Launch a Backup](./images/launch-a-backup.png)
 
-As you restore everything you also restore the client, connect to the client and check you have your data.
+In the restore point details, note that only one PVC is backed up—the one corresponding to the fenced replica.
 
-```
-kubectl exec -it deploy/cert-test -- bash
-psql " $DATABASE_URL "
-\c app
-select * from links;
-\q
-exit
-```
+![Only One PVC Backed Up](./images/only-one-pvc-backed-up.png)
 
-You should see your data back 
-```
-app=> select * from links;
- id |        url        |  name  |     description      | last_update 
-----+-------------------+--------+----------------------+-------------
-  1 | https://kasten.io | Kasten | Backup on kubernetes | 2024-03-25
-```
+### Testing a Restore
+
+1. Delete the `edb` namespace:
+
+   ```bash
+   kubectl delete ns edb
+   ```
+
+   _Note: When you delete the namespace, any volume snapshots are also deleted. You must restore from the external location profile._
+
+2. Perform a restore:
+
+   ![Choose Exported](./images/choose-exported.png)
+
+   Click "Restore" and wait for the EDB cluster to restart. You should see that the pod `cluster-example-2` starts immediately (without database initialization) and that `cluster-example-3` and `cluster-example-4` join shortly thereafter.
+
+   Monitor pods:
+
+   ```bash
+   kubectl get po -n edb -w
+   ```
+
+3. Verify Your Data
+
+   After restoration, check that your data is available by connecting to the client:
+
+   ```bash
+   kubectl exec -it deploy/cert-test -- bash
+   psql "$DATABASE_URL"
+   \c app
+   SELECT * FROM links;
+   \q
+   exit
+   ```
+
+   Expected output:
+
+   ```
+    id |        url        |  name  |       description       | last_update 
+   ----+-------------------+--------+-------------------------+-------------
+     1 | https://kasten.io | Kasten | Backup on Kubernetes    | 2024-03-25
+   ```
+
+Happy backing up and restoring!

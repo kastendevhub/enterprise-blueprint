@@ -78,8 +78,7 @@ ensure crash conistency which means that the data is in a state that would be co
 
 Creating a tar archive does not guarantee that the files being archived are in a consistent state, especially if the files are being modified during the tar process. To achieve crash consistency, you would need to ensure that the data is quiesced (i.e., all write operations are paused) before creating the tar archive.
 
-But for an intermediate backup storage when the blueprint finish its job and dump the data on the intermediate backup PVC 
-the data are indeed quiesced and it's safe to use tar for the "pseudo snapshot". Now your backup pvc can be fully managed 
+**But for an intermediate backup storage when the blueprint finish its job and dump the data on the intermediate backup PVC  the data are indeed quiesced and it's safe to use tar for the "pseudo snapshot"**. Now your backup pvc can be fully managed 
 by Kasten leveraging encryption, portability and immutability! 
 
 # A full example on a kind cluster 

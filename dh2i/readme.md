@@ -18,7 +18,7 @@ DH2I operator creates MSSQL Availability group and listeners on kubernetes for H
 | Operator vendor validation                    | In progress                      |                           |
 | Operator version tested                       | docker.io/dh2i/dxoperator:1.0    |                           |
 | High Availability                             | Yes                              | The database must be added to the Availability group see [install AdventureWorks2022 example](#lets-install-the-adventureworks2022-database-in-the-availability-group) <br> a failover test scenario is proposed |
-| Unsafe backup & restore without pods errors   | Yes                              | See [unsafe backup and restore](#unsafe-backup-and-restore) section |
+| Unsafe backup & restore without pods errors   | Yes                              | See [Unsafe backup and restore](../#unsafe-backup-and-restore) |
 | PIT (Point In Time) supported                 | Yes                              | See the [limitation](#limitations) section for RPO consideration |
 | Blueprint and BlueprintBinding example        | Yes                              | Only for database that belongs to the availability group, see the [limitation](#limitations) section |
 | Blueprint actions                             | Backup & restore                 | Delete is done through restorepoint deletion as backup artifacts are living in a shared PVC |
@@ -483,29 +483,9 @@ select @@servername
 You should get `dxesqlag-1`or `dxesqlag-2`
 
 
-# Unsafe backup and restore
-
-An Unsafe backup and restore consist of capturing the namespace that contains the database without any extended behaviour 
-from Kasten (freeze/flush or logical dump) by just backing up using the standard Kasten workflow. Then restore it to see if database : 
-1. Restarts and can accept new read/write connections 
-2. Is in a state consistent with the state of the database at the backup but this is very difficult to check 
-
-## Should I rely on unsafe backup and restore ?
-
-Short answer : No !!
-
-Long answer : Database are designed to restart after a crash and Kasten take crash consistent backup. Hence the quality of your 
-restore will be similar to a restart after a crash.
-
-**With unsafe backup and restore your workload may restart but silent data loss can occur with no error message to let you know.**
-
-## So what's the point with unsafe backup and restore ? 
-
-If you don't have the time to implement a blueprint for your database, unsafe backup and restore is always better than nothing ... 
-Actually it's far better than nothing. But your backup may be dirty and you'll see it just after a restoration. It's why later we will use 
-our extension mechanism (blueprint) to take proper backups.
-
 ## Testing Unsafe backup and restore 
+
+See [Unsafe backup and restore](../#unsafe-backup-and-restore).
 
 Let's add a table to the AdventureWorks2022 database. 
 ```

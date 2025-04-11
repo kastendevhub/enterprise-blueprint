@@ -97,3 +97,26 @@ The Enterprise Blueprints repository builds upon Kanister while integrating Kast
 
 …and more.
 
+# Unsafe backup and restore
+
+In the different blueprints example we'll speak of unsafe backup and restore. This section describe what is unsafe backup and restore.
+
+An Unsafe backup and restore consist of capturing the namespace that contains the database without any extended behaviour 
+from Kasten (freeze/flush or logical dump) by just backing up using the standard Kasten workflow. Then restore it to see if database : 
+1. Restarts and can accept new read/write connections 
+2. Is in a state consistent with the state of the database at the backup but this is very difficult to check 
+
+## Should I rely on unsafe backup and restore ?
+
+Short answer : No !!
+
+Long answer : Database are designed to restart after a crash and Kasten take crash consistent backup. Hence the quality of your 
+restore will be similar to a restart after a crash.
+
+**With unsafe backup and restore your workload may restart but silent data loss can occur with no error message to let you know.**
+
+## So what's the point with unsafe backup and restore ? 
+
+If you don't have the time to implement a blueprint for your database, unsafe backup and restore is always better than nothing ... 
+Actually it's far better than nothing. But your backup may be dirty and you'll see it just after a restoration. It's why later we will use 
+our extension mechanism (blueprint) to take proper backups.

@@ -16,7 +16,7 @@ An architecture reference that explains how to use the cass-operator (k8ssandra)
 | Operator vendor validation                    | In progress                      |                           |
 | Operator version tested                       | helm version 0.41.1 cassandra operator version v1.15.0 |     |
 | High Availability                             | Yes by design                    | Cassandra is an active active data service that feature data replication |
-| Unsafe backup & restore without pods errors   | No                               | Unsafe backup/restore lead to token errors we do not recommend this approach  |
+| Unsafe backup & restore without pods errors   | No                               | Unsafe backup/restore lead to token errors we do not recommend this approach see [Unsafe backup and restore](../#unsafe-backup-and-restore) |
 | PIT (Point In Time) supported                 | No                               | But we support incremental backup that can give you a 5 mins RTO even on a very big database  |
 | Blueprint and BlueprintBinding example        | Yes                              |                           |
 | Blueprint actions                             | Backup & restore                 | Delete is done through restorepoint deletion as backup artifacts are living in their own PVC (one PVC per node) |
