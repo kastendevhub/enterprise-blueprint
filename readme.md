@@ -27,7 +27,7 @@ We provide architectural references for integrating Kasten with the following da
 - Elasticsearch
 - MongoDB/Mongo-Enterprise
 - MongoDB/Percona
-- PostgreSQL/EDB
+- [PostgreSQL/EDB](./edb)
 - PostgreSQL/Crunchy
 - MySQL/Oracle
 - MySQL/Percona
