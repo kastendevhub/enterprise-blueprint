@@ -135,8 +135,6 @@ If you created your cluster using `cluster-example.yaml`, the cluster already in
 "k8s.enterprisedb.io/addons": '["kasten"]'
 ```
 
-For older versions of EDB that do not natively support the Kasten addons, refer to the example in [cluster-example.yaml](./cluster-example.yaml) and manually add the required annotations and labels.
-
 ### Install the EDB Blueprint
 
 ```bash
