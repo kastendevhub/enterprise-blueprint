@@ -299,8 +299,28 @@ select @@servername;
 
 3. Restore the database by discovering logical file names and running the restore via `sqlcmd` inside the container.
 
+Discover the logical file name of the database 
+```
+RESTORE FILELISTONLY FROM DISK = '/backup/AdventureWorks2022.bak';
+```
+The 2 logical files we find from the output is AdventureWorks2022 and AdventureWorks2022_log
+ 
+Now you can restore the database using this 2 virtual filename.
+ ```
+RESTORE DATABASE AdventureWorks2022 FROM DISK = '/backup/AdventureWorks2022.bak' WITH MOVE 'AdventureWorks2022' TO '/var/opt/mssql/data/AdventureWorks2022.mdf', MOVE 'AdventureWorks2022_log' TO '/var/opt/mssql/data/AdventureWorks2022.ldf', RECOVERY;
+```
+
 4. Add the database to the Availability Group:
 
+In order to add the AdventureWorks2022 database in the availabilty group you need to swithc first in full recovery mode and take a backup. 
+
+   ```sql
+   ALTER DATABASE AdventureWorks2022 SET RECOVERY FULL;
+   BACKUP DATABASE AdventureWorks2022 TO DISK = '/backup/AdventureWorks2022.bak';
+   BACKUP LOG AdventureWorks2022 TO DISK = '/backup/AdventureWorks2022.trn';
+   ```
+
+Now we can add the database to the availability group 
    ```sql
    use master;
    ALTER AVAILABILITY GROUP AG1 ADD DATABASE AdventureWorks2022;
