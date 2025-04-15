@@ -157,6 +157,8 @@ spec:
 EOF
 ```
 
+If you don't have a storage class to create RWX shared pvc you can check [this guide](../generic-rwx-storage/).
+
 ### 5. Create the DH2I MSSQL Cluster
 
 Use a custom resource definition (CRD) to deploy your MSSQL cluster:

@@ -35,9 +35,9 @@ We provide architectural references for integrating Kasten with the following da
 - Kafka/Confluent
 - [Cassandra/K8ssandra](./k8ssandra/)
 
-## Five Principles Guiding Enterprise Blueprints
+## Six Principles Guiding Enterprise Blueprints
 
-Each architectural reference adheres to these five core principles:
+Each architectural reference adheres to these six core principles:
 
 ### 1. Always Choose an Enterprise Database Operator
 
@@ -69,6 +69,16 @@ If PIT restore is supported, we make every effort to enable it. While this may i
 Backups are frequent, automated operations with minimal impact on applications. In contrast, restores are rare, high-stress operations that involve writes (and sometimes overwrites) and can significantly impact applications. 
 
 Pre-restore operations may be required, and in some cases, in-place restores may not be supported due to design or field-learned limitations. When automation isn't feasible, we provide detailed, step-by-step documentation for manual restores.
+
+### 6. Prefer an itermediate pvc storage for the backups instead of using the operator datamover 
+
+Even if often operator come with their own datamover we prefer creating the backups on an intermediate storage that kasten will handle: 
+- Those operators are not backup specialist and good data moving is challenging (security, encryption, immutability, incremental, portability ...). Let's give that job to Kasten.
+- Using an intermediate pvc allow fast local restore from the snapshot 
+- DBA friendly, DBA are used to work with backup stored on filesystem and with this approach they "feel at home"
+- Granular restore, Kasten let you restore an intermediate backup PVC in the same namespace with timestamp appended to it (known as volume clone restore). This let the DBA use it to restore for instance just a table at a given point in time without disrupting the whole database or restoring all the database in the past.
+
+If you don't have a storage class to create RWX shared pvc for intermediate backup you can check [this guide](./generic-rwx-storage/).
 
 **While we ensure detailed restore documentation, full automation is not always guaranteed.**
 

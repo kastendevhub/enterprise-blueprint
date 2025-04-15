@@ -22,7 +22,7 @@ Drive ops-manager from a blueprint to trigger on demand mongodb snapshots.
 
 ## Limitations
 
-- This blueprint does not use the Kasten datamover but invoke and relate to ops manager, his goal is to be used in an holistic backup.
+- This blueprint does not use the Kasten datamover but invoke ops manager, his goal is to be used in an holistic backup.
 
 # Architecture 
 
