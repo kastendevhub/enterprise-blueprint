@@ -19,6 +19,7 @@ actions:
           - -c
           - |
             namespace={{  .Namespace.Name  }}
+            kasten_backup=kasten-backup
             for cassandradatacenter in $(kubectl get cassandradatacenter -n $namespace -o json | jq -r '.items[] | .metadata.name'); do
                 echo "Found cassandradatacenter: $cassandradatacenter"
                 echo "check if the annotations are present"
@@ -49,36 +50,43 @@ actions:
                 user=$(kubectl get secret $secret -n cass-operator -o go-template='{{"{{"}} .data.username | base64decode {{"}}"}}')
                 password=$(kubectl get secret $secret -n cass-operator -o go-template='{{"{{"}} .data.password | base64decode {{"}}"}}')
                 schema_saved=false
-                    
+
+                echo "execute nodetool snapshot or nodetool flush first on all the pods before moving the snapshots to the backups directory because this operation is quick and must be done as close as possible for each pods of the datacenter"
                 for pod in $(kubectl get cassandradatacenter -n $namespace $cassandradatacenter -o go-template='{{"{{"}}range $key, $value := .status.nodeStatuses{{"}}"}}{{"{{"}}$key{{"}}"}} {{"{{"}}end{{"}}"}}'); do
                     echo "Working on $pod"
+                    kubectl exec -ti $pod -c cassandra -n $namespace -- bash -c "mkdir -p /backups/${kasten_backup}"
                     if [ $schema_saved = false ]; then
                         echo "Schema is not saved yet"
-                        kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e 'DESCRIBE SCHEMA' > /backups/schema.cql"
+                        kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e 'DESCRIBE SCHEMA' > /backups/${kasten_backup}/schema.cql"
                         schema_saved=true
                     fi
-                    # we need to discover the keyspaces and tables in the cluster, especially each table use a unique id
-                    # for instance if the guests table in the restaurants keyspace is having an id of 06c67ef0-1387-11f0-b576-0b6d1f3c36b1
-                    # {"id": "06c67ef0-1387-11f0-b576-0b6d1f3c36b1", "table_name": "guests", "keyspace_name": "restaurants"}
-                    # snapshots will be found in /var/lib/cassandra/data/restaurants/guests-06c67ef0138711f0b5760b6d1f3c36b1/snapshots
-                    # and the backups will be found in /var/lib/cassandra/data/restaurants/guests-06c67ef0138711f0b5760b6d1f3c36b1/backups
-                    # we need to move the snapshots and backups files under /backups/[keyspace_name]/[table_name]/snapshots/[hostname]
-                    # we store the table description in /backups/table_desc.txt
-                    kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e 'SELECT JSON id, table_name, keyspace_name FROM system_schema.tables;' | grep  '{' | grep -v system" > /tmp/table_desc.txt
-                    PREVIOUS_IFS=$IFS
-                    IFS=$'\n'
-                    cassandra_prefix="/var/lib/cassandra/data"
-                    backup_pvc_mount_point="/backups"
+                    # we store the table description in /backups/${kasten_backup}/table_desc.txt
+                    kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e 'SELECT JSON id, table_name, keyspace_name FROM system_schema.tables;' | grep  '{' | grep -v system" > /backups/${kasten_backup}/table_desc.txt                    
                     if [ $fullBackup = true ]; then
                         echo "doing a full backup"
-                        echo "clean up all the keyspace directory under /backup" 
-                        kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "find /backups -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +"
                         echo "calling nodetool"
                         kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "nodetool cleanup"
                         kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "nodetool clearsnapshot --all"
                         kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "nodetool snapshot -t ${pod}"
-
-                        for line in $(cat /tmp/table_desc.txt); 
+                    else
+                        echo "doing an incremental backup"
+                        kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "nodetool flush"                        
+                    fi
+                done
+                    
+                echo "moving all the files to the backup directory now this operation is slow because we are moving the files to 2 different mount points but the slowness is not an issue because those backup in the cassandra mount point are already taken and consistent with the operation done above"
+                for pod in $(kubectl get cassandradatacenter -n $namespace $cassandradatacenter -o go-template='{{"{{"}}range $key, $value := .status.nodeStatuses{{"}}"}}{{"{{"}}$key{{"}}"}} {{"{{"}}end{{"}}"}}'); do
+                    echo "Working on $pod"
+                    PREVIOUS_IFS=$IFS
+                    IFS=$'\n'
+                    cassandra_prefix="/var/lib/cassandra/data"
+                    backup_pvc_mount_point="/backups/${kasten_backup}"
+                    if [ $fullBackup = true ]; then
+                        echo "doing a full backup"
+                        echo "clean up all the keyspace directory under $backup_pvc_mount_point" 
+                        kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "find $backup_pvc_mount_point -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +"
+                        
+                        for line in $(cat $backup_pvc_mount_point/table_desc.txt); 
                         do
                             id=$(echo $line | jq -r '.id')
                             id="${id//-/}"
@@ -100,7 +108,7 @@ actions:
                         echo "doing an incremental backup"
                         kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "nodetool flush"
                         
-                        for line in $(cat /tmp/table_desc.txt); 
+                        for line in $(cat /backups/${kasten_backup}/table_desc.txt); 
                         do
                             id=$(echo $line | jq -r '.id')
                             id="${id//-/}"
@@ -174,17 +182,18 @@ actions:
           - -c
           - |
             namespace={{  .Namespace.Name  }}
+            kasten_backup=kasten-backup
             for cassandradatacenter in $(kubectl get cassandradatacenter -n $namespace -o json | jq -r '.items[] | .metadata.name'); do
                 echo "Found cassandradatacenter: $cassandradatacenter"
                 echo "Found cassandradatacenter: $cassandradatacenter"
                 echo "The annotation kasten.io/counterIncrementalBackups must be removed so that the next backup will be a full backup"
                 kubectl annotate cassandradatacenter -n $namespace $cassandradatacenter kasten.io/counterIncrementalBackups- --overwrite
 
-                echo "Wait 10 minutes for it to be ready"
+                echo "Wait 10 minutes max for it to be ready"
                 kubectl wait --for='jsonpath={.status.cassandraOperatorProgress}=Ready' -n $namespace cassandradatacenter/$cassandradatacenter --timeout=600s
                 
                 echo "we don't need to clean up existing user tables because we don't restore the database pvc only the backups pvc"
-                echo "Hence there is no schema after restore and we can restore from the schema stored in the /backups/schema.cql file on the first pod"
+                echo "Hence there is no schema after restore and we can restore from the schema stored in the /backups/${kasten_backup}/schema.cql file on the first pod"
                 secret="$(kubectl get cassandradatacenter -n $namespace $cassandradatacenter -o json | jq -r '.spec.clusterName')-superuser"
                 user=$(kubectl get secret $secret -n cass-operator -o go-template='{{"{{"}} .data.username | base64decode {{"}}"}}')
                 password=$(kubectl get secret $secret -n cass-operator -o go-template='{{"{{"}} .data.password | base64decode {{"}}"}}')
@@ -193,7 +202,7 @@ actions:
                     echo "Working on $pod"
                     if [ $schema_restored = false ]; then
                         echo "Schema is not restored yet"
-                        kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e \"\$(cat /backups/schema.cql)\" --request-timeout=300"
+                        kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e \"\$(cat /backups/${kasten_backup}/schema.cql)\" --request-timeout=300"
                         schema_restored=true
                     fi
                     # we need to discover the keyspaces and tables in the cluster, especially each table use a unique id
@@ -201,14 +210,14 @@ actions:
                     # {"id": "06c67ef0-1387-11f0-b576-0b6d1f3c36b1", "table_name": "guests", "keyspace_name": "restaurants"}
                     # snapshots will be found in /var/lib/cassandra/data/restaurants/guests-06c67ef0138711f0b5760b6d1f3c36b1/snapshots
                     # and the backups will be found in /var/lib/cassandra/data/restaurants/guests-06c67ef0138711f0b5760b6d1f3c36b1/backups
-                    # we need to move the snapshots and backups files under /backups/[keyspace_name]/[table_name]/snapshots/[hostname]
-                    # we store the table description in /backups/table_desc.txt
-                    kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e 'SELECT JSON id, table_name, keyspace_name FROM system_schema.tables;' | grep  '{' | grep -v system" > /tmp/table_desc.txt
+                    # we need to move the snapshots and backups files under /backups/${kasten_backup}/[keyspace_name]/[table_name]/snapshots/[hostname]
+                    # we store the table description in /backups/${kasten_backup}/table_desc.txt
+                    kubectl exec -it $pod -c cassandra -n $namespace -- bash -c "cqlsh -u '$user' -p '$password' -e 'SELECT JSON id, table_name, keyspace_name FROM system_schema.tables;' | grep  '{' | grep -v system" > /backups/${kasten_backup}/table_desc.txt
                     PREVIOUS_IFS=$IFS
                     IFS=$'\n'
                     cassandra_prefix="/var/lib/cassandra/data"
-                    backup_pvc_mount_point="/backups"
-                    for line in $(cat /tmp/table_desc.txt); 
+                    backup_pvc_mount_point="/backups/${kasten_backup}"
+                    for line in $(cat /backups/${kasten_backup}/table_desc.txt); 
                     do
                         id=$(echo $line | jq -r '.id')
                         id="${id//-/}"
