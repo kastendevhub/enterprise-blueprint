@@ -230,6 +230,15 @@ After the backup PVCs are restored by Kasten, execute the following scripts:
    kubectl create -f k10-k8ssandra-bp-0.0.4-binding.yaml
    ```
 
+   or 
+   
+   ```bash
+   kubectl create -f k10-k8ssandra-bp-0.0.5.yaml
+   kubectl create -f k10-k8ssandra-bp-0.0.5-binding.yaml
+   ```
+
+
+
 2. **Install the Cassandra Hooks Blueprint:**
 
    ```bash
