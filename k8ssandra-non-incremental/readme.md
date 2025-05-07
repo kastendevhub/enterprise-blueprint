@@ -18,16 +18,16 @@ This document explains how to integrate the cass-operator (K8ssandra) with Kaste
 | **PIT (Point In Time) Support**               | No                                                                          | We support incremental backups that provide a 5-minute RTO even for very large clusters                                                                   |
 | **Blueprint and BlueprintBinding Example**    | Yes                                                                         |                                                                                                                                                           |
 | **Blueprint Actions**                         | Backup & Restore                                                            | Deletion is done through restore point deletion since backup artifacts reside on their own PVC (one PVC per node)                                           |
-| **Backup Performance Impact**                 | Full backups have a greater impact than incremental backups                 | See [Architecture Diagrams](#architecture-diagrams) for details                                                                                           |
+| **Backup Performance Impact**                 | The backup is non incremental but very efficient in Cassandra                 | See [Understanding backup in Cassandra](#understanding-backup-in-cassandra) for details                                                                                           |
 
 ## Limitations
 
 - **PIT Restore Not Implemented:**  
-  Point-in-time restore is not available—not due to a Cassandra limitation, but because field experience shows that incremental backups are sufficient, and avoiding PIT simplifies the design.
+  Point-in-time restore is not available—not due to a Cassandra limitation, but because in this blueprint we deliberately choose a simpler workflow. We provide an [incremental approach](../k8ssandra/).
 - **Sequential Backup within a Namespace:**  
   Datacenters in the same namespace are backed up sequentially. We recommend deploying one datacenter per namespace and using Kasten to parallelize backups.
 - **Partial Support for K8ssandraCluster:**  
-  The blueprint supports backup of CassandraDatacenter objects but not the entire K8ssandraCluster. The blueprint discovers and protects CassandraDatacenter resources even when created via a K8ssandraCluster. We have not verified whether a K8ssandraCluster might overwrite the annotations set by the blueprint.
+  The blueprint supports backup of CassandraDatacenter objects but not the entire K8ssandraCluster. The blueprint discovers and protects CassandraDatacenter resources even when created via a K8ssandraCluster. 
 
 ## Understanding backup in Cassandra 
 
@@ -48,7 +48,7 @@ This combination of hardlinks and the snapshot mechanism makes Cassandra backups
 
 Non incremental Backup: 
 1. Before Policy Hook
-  - backup schema and uid of the tables 
+  - backup schema 
   - clear snapshot
   - create snapshot 
 2. let kasten take care of the protection of the pvc 
@@ -167,7 +167,7 @@ It is recommended to test the backup and restore process manually before running
 
    We just clear cassandra snapshots after the PVC has been fully exported this speed up the next backup which is also clearing the cassandra snapshots.
 
-   Add the pre-backuo and post-backup hooks to your backup policy:
+   Add the pre-backup and post-backup hooks to your backup policy:
    
    ![pre and post backup hook](./images/before-after-backup.png)
 
