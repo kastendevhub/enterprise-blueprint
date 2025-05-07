@@ -1,0 +1,18 @@
+# we overrind the kanister builtin blueprint
+# to avoid calling medusa 
+apiVersion: config.kio.kasten.io/v1alpha1
+kind: BlueprintBinding
+metadata:
+  name: cassandradatacenter-bp-binding  
+  namespace: kasten-io
+spec:
+  blueprintRef:
+    name: k10-k8ssandra-bp-0.0.4
+    namespace: kasten-io
+  resources:
+    matchAll:
+    - type:
+        operator: In
+        values:
+        - group: cassandra.datastax.com
+          resource: cassandradatacenters
