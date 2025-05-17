@@ -110,7 +110,7 @@ actions:
 
             if [ $schema_restored = false ]; then
             echo "Schema is not restored yet, first delete the existing schema and then restore the schema from the schema.cql file"
-            cat <<EOF | kubectl exec -i -c cassandra $pod -- /bin/bash
+            cat <<EOF | kubectl exec -n $namespace -i -c cassandra $pod -- /bin/bash
             echo "Working on \$HOSTNAME"
             for dir in \$(find /var/lib/cassandra/data -mindepth 1 -maxdepth 1 -type d ! -name "system*"); do
                 keyspace_name=\$(basename \$dir)
