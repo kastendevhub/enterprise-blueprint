@@ -268,9 +268,9 @@ For this reason we created a cleaner job that proceed pvc per pvc that you must 
 - Delete the cassandradatacenter `kubectl delete -f datacenter.yaml`
 - From the restore point restore only the volumes and nothing else 
 - Apply the cleaner job for each volume :
-  * `/clean-up-launcher.sh server-data-dse-cass-prd-default-sts-0 cass-operator`
-  * `/clean-up-launcher.sh server-data-dse-cass-prd-default-sts-1 cass-operator`
-  * `/clean-up-launcher.sh server-data-dse-cass-prd-default-sts-2 cass-operator`
+  * `./clean-up-launcher.sh server-data-dse-cass-prd-default-sts-0 cass-operator`
+  * `./clean-up-launcher.sh server-data-dse-cass-prd-default-sts-1 cass-operator`
+  * `./clean-up-launcher.sh server-data-dse-cass-prd-default-sts-2 cass-operator`
 - Now from the restore point restore the rest of the namespace (except the statefulset)
 
 Your datacenter will restart. 
