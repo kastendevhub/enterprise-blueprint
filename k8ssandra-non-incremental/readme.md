@@ -123,7 +123,7 @@ When you install the k8ssandra operator, the cassandra operator is automatically
    Then, connect to the first Cassandra pod:
 
    ```bash
-   kubectl exec -it -c cassandra dse-cass-prd-default-sts-0 -- bash
+   kubectl -n cass-operator exec -it -c cassandra dse-cass-prd-default-sts-0 -- bash
    cqlsh -u dse-superuser -p <password>
    ```
 
@@ -255,3 +255,22 @@ You can perform a granular restore of a specific keyspace or table using the "Vo
 **Warning:** This operation requires advanced Cassandra knowledge and should be performed only by experienced users.
 
 Happy backing up and restoring!
+
+
+### What if the cassandra datacenter does not restart because the dirty writes were taken at backup
+
+Even if the blueprint erase the cassandra data to reinstall the data from the snapshots directory this data may be dirty and prevents cassandra from restarting.
+
+You'll see error in the cassandra logs that cassandra cannot recover. But the conscequence is because of that the execution of the blueprint to replace the data is blocked ...
+
+For this reason we created a cleaner job that proceed pvc per pvc that you must apply manually following this steps :
+
+- Delete the cassandradatacenter `kubectl delete -f datacenter.yaml`
+- From the restore point restore only the volumes and nothing else 
+- Apply the cleaner job for each volume :
+  * `/clean-up-launcher.sh server-data-dse-cass-prd-default-sts-0 cass-operator`
+  * `/clean-up-launcher.sh server-data-dse-cass-prd-default-sts-1 cass-operator`
+  * `/clean-up-launcher.sh server-data-dse-cass-prd-default-sts-2 cass-operator`
+- Now from the restore point restore the rest of the namespace (except the statefulset)
+
+Your datacenter will restart. 

@@ -12,7 +12,7 @@ spec:
   size: 3  
   storageConfig:      
       cassandraDataVolumeClaimSpec:
-        storageClassName: standard-rwo
+        # storageClassName: standard-rwo
         accessModes:
           - ReadWriteOnce
         resources:
