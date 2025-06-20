@@ -257,7 +257,7 @@ You can perform a granular restore of a specific keyspace or table using the "Vo
 Happy backing up and restoring!
 
 
-### What if the cassandra datacenter does not restart because the dirty writes were taken at backup
+### What if the cassandra datacenter does not restart because dirty writes were taken at backup
 
 Even if the blueprint erase the cassandra data to reinstall the data from the snapshots directory this data may be dirty and prevents cassandra from restarting.
 
