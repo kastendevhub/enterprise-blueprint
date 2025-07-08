@@ -1,0 +1,87 @@
+
+restore-cpd-br-cms
+    restore-cpd-br-cms
+    restore-cpd-cpdbr-configmaps
+    restore-cpd-cpdbr-tenant-resources
+    restore-cpd-clusterroles
+restore-cpd-volumes
+restore-cpd-crd-resources
+restore-cpd-operators-cm-resources
+restore-pre-operators-START
+    bedrock-configmaps
+    bedrock-nss-configmaps
+    bedrock-nss-configmaps
+    bedrock-secrets
+    bedrock-operatorgroup
+    cert-secrets
+    bedrock-certs
+    bedrock-crs
+    bedrock-edb-cluster
+    all-roles
+    olm-utils-cm
+    internal-tls-certificate
+    internal-tls-pkcs8-certificate
+    internal-tls-pkcs12-certificate
+    internal-tls-secret
+    internal-tls-pkcs8-secret
+    internal-tls-pkcs12-secret
+    zen-issuers
+    zen-cronjobs
+    zen-lite-operation-configmap
+    product-configmap
+    zen-audit-secrets
+    zen-nginx-configmaps
+    attributes-configmap
+    zen-objstore-mirror-scripts-configmap
+    zen-watchdog-ops-configmap
+    admin-user-details-secrets
+    default-ssl-secrets
+    ibm-nginx-internal-tls-ca-secrets
+    ibm-zen-file-store-encryption-key-secrets
+    ibm-zen-vault-sdk-jwt-secrets
+    zen-secrets-aes-key-secrets
+    zen-service-broker-secret-secrets
+    zen-jwt-secrets
+    zen-watchdog-ops-secrets
+    saml-secret
+    zen-sas
+    ccsikc-resources
+    ccs-pre-operators
+    ws-sa
+    wsl-resources
+cpd-restore-operators
+    restore-post-operators
+        all-services
+    cpd-isolate-namespacescope
+    cpd-pre-workload-restore-hooks
+    restore-pre-operands
+    zen-crs
+    restore-pre-operands
+    restore-operands
+        bedrock-workloads
+        ccsikc-deployments
+        ccsikc-statefulsets
+        ccsikc-replicasets
+        ccsikc-jobs
+        ccsikc-cronjobs
+        ccs-deployments
+        ccs-replicasets
+        ccs-statefulsets
+        ccs-cronjobs
+        ccs-services
+        ccs-jobs
+    restore-post-operands
+    cpd-post-restore
+        ibmcpd-check/controlPlaneCompletedStatus
+        restore-jobs/minio-edb-restore-job
+        zenextension-cr
+        zen-volumes
+        restore-post-namespacescope
+        cpd-restore-namespacescope
+            datarefinery-crs
+            ccs-clusterroles
+            ccs-crs
+        restore-post-namespacescope
+            ibm-cpd-ws-runtime-241-py
+            ws-clusterroles
+            ws-crs

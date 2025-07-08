@@ -1,0 +1,66 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  annotations:
+    cpdbr.cpd.ibm.com/plan-exec-result: '{"status":"Completed","errors":0,"warnings":0,"startTime":"2025-06-19T15:30:01.830977+02:00","endTime":"2025-06-19T15:38:40.898561+02:00","lastUpdatedTime":"2025-06-19T15:38:40.682514+02:00","actionErrors":[],"plan":[{"name":"service-orchestration","phase":"Completed","workflowActionResults":[{"dppName":"service-orchestration","actionName":"cpd-precheck-backup","actionIndex":0,"type":"local-exec","phase":"Completed","error":"","startTime":"2025-06-19T15:30:06.536713+02:00","endTime":"2025-06-19T15:30:49.655565+02:00","undo":false},{"dppName":"service-orchestration","actionName":"cpd-operators-backup","actionIndex":1,"type":"local-exec","phase":"Completed","error":"","startTime":"2025-06-19T15:30:49.869517+02:00","endTime":"2025-06-19T15:31:44.895568+02:00","undo":false},{"dppName":"service-orchestration","actionName":"operators-backup-validate","actionIndex":2,"type":"local-exec","phase":"Completed","error":"","startTime":"2025-06-19T15:31:45.119899+02:00","endTime":"2025-06-19T15:31:46.422075+02:00","undo":false},{"dppName":"service-orchestration","actionName":"cpd-checkpoint","actionIndex":3,"type":"local-exec","phase":"Completed","error":"","startTime":"2025-06-19T15:31:46.6413+02:00","endTime":"2025-06-19T15:34:00.09659+02:00","undo":false},{"dppName":"service-orchestration","actionName":"cpd-pre-backup-hooks","actionIndex":4,"type":"local-exec","phase":"Completed","error":"","startTime":"2025-06-19T15:34:00.3116+02:00","endTime":"2025-06-19T15:34:23.63177+02:00","undo":false},{"dppName":"service-orchestration","actionName":"volume_backup","actionIndex":5,"type":"group","phase":"Completed","error":"","startTime":"2025-06-19T15:34:23.848814+02:00","endTime":"2025-06-19T15:36:53.58497+02:00","groupProgress":{"name":"cpd-tenant-vol-24e4b7ac-4d12-11f0-8697-72b7af6a8d07","type":"backup","current":600,"total":600,"errors":0,"warnings":0,"phase":"Completed","expires":"2026-06-19T15:34:34+02:00","storageLocation":"dpa-sample-1"},"undo":false},{"dppName":"service-orchestration","actionName":"cpd-post-backup-hooks","actionIndex":6,"type":"local-exec","phase":"Completed","error":"","startTime":"2025-06-19T15:36:53.874365+02:00","endTime":"2025-06-19T15:37:38.993948+02:00","undo":false},{"dppName":"service-orchestration","actionName":"resource_backup","actionIndex":7,"type":"group","phase":"Completed","error":"","startTime":"2025-06-19T15:37:39.213709+02:00","endTime":"2025-06-19T15:38:22.78094+02:00","groupProgress":{"name":"cpd-tenant-91a299d6-4d12-11f0-8697-72b7af6a8d07","type":"backup","current":7651,"total":7651,"errors":0,"warnings":0,"phase":"Completed","expires":"2026-06-19T15:37:36+02:00","storageLocation":"dpa-sample-1"},"undo":false},{"dppName":"service-orchestration","actionName":"cpd-backup-validation","actionIndex":8,"type":"local-exec","phase":"Completed","error":"","startTime":"2025-06-19T15:38:22.99331+02:00","endTime":"2025-06-19T15:38:40.012877+02:00","undo":false}],"startTime":"2025-06-19T15:30:06.536291+02:00","endTime":"2025-06-19T15:38:40.251858+02:00"}],"undoPlan":[],"checkpointId":"84d09d7b2594f643bbe3f14933614e6e66c1d53c-68541154-00000001","orchestration-type":"service","orchestration-version":"1.0.0","br-mode":"online","traceId":"a82a0796-e6b6-4f48-bf28-ae7533468696","cpdDPASProvider":"velero","cpdDPASPlanVersion":"2.0.0"}'
+    cpdbr.cpd.ibm.com/resolved-namespaces: cpd-operators,cpd-instance
+    cpdbr.cpd.ibm.com/tenant-backup: "true"
+    cpdbr.cpd.ibm.com/tenant-operator-namespace: cpd-operators
+    cpdbr.cpd.ibm.com/tenant-service-namespace: cpd-instance
+    velero.io/resource-timeout: 1h0m0s
+    velero.io/source-cluster-k8s-gitversion: v1.29.9+5865c5b
+    velero.io/source-cluster-k8s-major-version: "1"
+    velero.io/source-cluster-k8s-minor-version: "29"
+  creationTimestamp: "2025-06-19T13:38:38Z"
+  generation: 6
+  labels:
+    cpdbr-aux.managed-by: ibm-cpdbr-sre
+    cpdbr-oadp.build-number: "551"
+    cpdbr-oadp.checkpoint-id: 84d09d7b2594f643bbe3f14933614e6e66c1d53c-68541154-00000001
+    cpdbr-oadp.cpd-namespace: cpd-instance
+    cpdbr-oadp.managed-by: ibm-cpdbr-oadp
+    cpdbr-oadp.version: 5.1.3
+    cpdbr.cpd.ibm.com/backup-name: cpd-oadp-tenant-backup-2-meta
+    cpdbr.cpd.ibm.com/backup-seq: meta
+    cpdbr.cpd.ibm.com/br-mode: online
+    cpdbr.cpd.ibm.com/dpas-plan-version: 2.0.0
+    cpdbr.cpd.ibm.com/dpas-provider: velero
+    cpdbr.cpd.ibm.com/orchestration-type: service
+    cpdbr.cpd.ibm.com/orchestration-version: 1.0.0
+    cpdbr.cpd.ibm.com/plan-exec-info: "true"
+    cpdbr.cpd.ibm.com/tenant-backup-name: cpd-oadp-tenant-backup-2
+    cpdbr.cpd.ibm.com/trace-id: a82a0796-e6b6-4f48-bf28-ae7533468696
+    velero.io/storage-location: dpa-sample-1
+  name: cpd-oadp-tenant-backup-2-meta
+  namespace: openshift-adp
+  resourceVersion: "654306233"
+  uid: bfd14c7d-1d4b-40b7-a21e-2d7155ac1458
+spec:
+  csiSnapshotTimeout: 10m0s
+  defaultVolumesToFsBackup: false
+  hooks: {}
+  includeClusterResources: false
+  includedNamespaces:
+  - openshift-adp
+  includedResources:
+  - configmaps
+  itemOperationTimeout: 4h0m0s
+  labelSelector:
+    matchLabels:
+      cpdbr.cpd.ibm.com/tenant-backup-name: cpd-oadp-tenant-backup-2
+      cpdfwk.aux-kind: tenant-meta
+  metadata: {}
+  snapshotMoveData: false
+  storageLocation: dpa-sample-1
+  ttl: 8760h0m0s
+status:
+  completionTimestamp: "2025-06-19T13:38:39Z"
+  expiration: "2026-06-19T13:38:38Z"
+  formatVersion: 1.1.0
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsBackedUp: 1
+    totalItems: 1
+  startTimestamp: "2025-06-19T13:38:38Z"
+  version: 1

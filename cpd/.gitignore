@@ -1,0 +1,13 @@
+*.tgz
+cpd-cli-workspace/
+cpd-cli-darwin-SE-14.0.1-396
+cpd-cli-linux-EE-14.0.1-396
+cpd-cli-linux-SE-14.0.1-396
+cpd-cli-ppc64le-EE-14.0.1-396
+cpd-cli-ppc64le-SE-14.0.1-396
+cpd-vars-mcourcy.sh
+.cpdbr-oadp/
+cpd-cli/
+cpd-cli-darwin-EE-14.1.3-1968/
+credentials-velero-mcourcy
+CPD.pptx

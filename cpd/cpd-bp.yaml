@@ -1,0 +1,98 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata:
+  name: cpd-bp
+  namespace: kasten-io
+actions:
+  backup:
+    outputArtifacts:
+      cpdOutput:
+        keyValue:
+          schedulingBackupName: '{{ .Phases.backupSchedulingAndTenant.Output.schedulingOnline }}'
+          tenantBackupName: '{{ .Phases.backupSchedulingAndTenant.Output.tenantOnline }}'         
+    phases:
+    - func: KubeTask
+      name: backupSchedulingAndTenant
+      objects:
+          cpdVars:
+            kind: Secret
+            name: 'cpd-vars'
+            namespace: '{{ .Object.metadata.namespace }}'
+      args:
+        image: michaelcourcy/kasten-cpd:k108.0.2-cpd5.1.x
+        namespace: '{{ .Object.metadata.namespace }}'
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -x
+          - -c
+          - |
+            backupDate=$(date +%Y%m%d-%H%M%S)
+
+            echo "applying cpd-vars defined in the secret"
+            {{- range $key, $value := .Phases.backupSchedulingAndTenant.Secrets.cpdVars.Data }}
+            export {{ $key }}={{ $value | toString }}
+            {{- end }}           
+            
+            echo "checking cpd-cli is working properly"
+            export HOME=/tmp
+            cd /tmp/
+            cpd-cli oadp client config set namespace=$OADP_PROJECT
+            # test cpld-cli can list tenant-backup
+            cpd-cli oadp tenant-backup list
+
+            echo "Check whether the services that you are using support platform backup and restore"
+            cpd-cli oadp service-registry check \
+              --tenant-operator-namespace ${PROJECT_CPD_INST_OPERATORS} \
+              --verbose \
+              --log-level debug
+
+            # TODO checking the status of each service require podman or docker (cpd-cli manage get-cr-status)
+
+            echo "============================================================================"
+            echo "Backing up the scheduling service"
+            echo "============================================================================"
+            cpd-cli oadp client config set cpd-namespace=${PROJECT_SCHEDULING_SERVICE}
+            echo "precheck for scheduling service backup"
+            cpd-cli oadp backup precheck \
+              --backup-type singleton \
+              --include-namespaces=${PROJECT_SCHEDULING_SERVICE} \
+              --exclude-checks ValidVolumeSnapshotClass \
+              --hook-kind=checkpoint \
+              --log-level=debug \
+              --verbose
+            echo "scheduling service backup"            
+            cpd-cli oadp backup create scheduling-online-${backupDate} \
+              --backup-type singleton \
+              --include-namespaces=${PROJECT_SCHEDULING_SERVICE} \
+              --include-resources='operatorgroups,configmaps,catalogsources.operators.coreos.com,subscriptions.operators.coreos.com,customresourcedefinitions.apiextensions.k8s.io,scheduling.scheduler.spectrumcomputing.ibm.com' \
+              --prehooks=false \
+              --posthooks=false \
+              --with-checkpoint \
+              --log-level=debug \
+              --verbose \
+              --hook-kind=checkpoint \
+              --selector 'icpdsupport/ignore-on-nd-backup notin (true)'
+            echo "Validate the scheduling backup"
+            cpd-cli oadp backup validate \
+              --backup-type singleton \
+              --include-namespaces=${PROJECT_SCHEDULING_SERVICE} \
+              --backup-names scheduling-online-${backupDate} \
+              --log-level trace \
+              --verbose \
+              --hook-kind checkpoint
+            kando output schedulingOnline scheduling-online-${backupDate}
+            
+            echo "============================================================================"
+            echo "Backing up tenant"
+            echo "============================================================================"
+            cpd-cli oadp tenant-backup create tenant-online-${backupDate} \
+            --tenant-operator-namespace ${PROJECT_CPD_INST_OPERATORS} \
+            --log-level=debug \
+            --verbose
+            kando output tenantOnline tenant-online-${backupDate}
+
+          

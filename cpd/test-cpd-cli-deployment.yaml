@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpd-cli-deployment  
+  namespace: cpd-kasten
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpd-cli
+  template:
+    metadata:
+      labels:
+        app: cpd-cli  
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: cpd-cli
+        image: docker.io/michaelcourcy/kasten-cpd:k108.0.2-cpd5.1.x
+        imagePullPolicy: Always
+        command: ["/bin/bash", "-c", "tail -f /dev/null"]
+        securityContext:          
+          runAsUser: 1001
+          runAsGroup: 1001
+          allowPrivilegeEscalation: false
+        

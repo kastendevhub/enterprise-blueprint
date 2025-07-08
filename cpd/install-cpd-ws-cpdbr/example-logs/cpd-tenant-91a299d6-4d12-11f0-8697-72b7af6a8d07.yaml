@@ -1,0 +1,81 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  annotations:
+    cpdbr.cpd.ibm.com/resolved-namespaces: cpd-operators,cpd-instance
+    cpdbr.cpd.ibm.com/tenant-backup: "true"
+    cpdbr.cpd.ibm.com/tenant-operator-namespace: cpd-operators
+    cpdbr.cpd.ibm.com/tenant-service-namespace: cpd-instance
+    velero.io/resource-timeout: 1h0m0s
+    velero.io/source-cluster-k8s-gitversion: v1.29.9+5865c5b
+    velero.io/source-cluster-k8s-major-version: "1"
+    velero.io/source-cluster-k8s-minor-version: "29"
+  creationTimestamp: "2025-06-19T13:37:36Z"
+  generation: 28
+  labels:
+    cpdbr-aux.managed-by: ibm-cpdbr-sre
+    cpdbr-oadp.build-number: "551"
+    cpdbr-oadp.checkpoint-id: 84d09d7b2594f643bbe3f14933614e6e66c1d53c-68541154-00000001
+    cpdbr-oadp.cpd-namespace: cpd-instance
+    cpdbr-oadp.managed-by: ibm-cpdbr-oadp
+    cpdbr-oadp.version: 5.1.3
+    cpdbr.cpd.ibm.com/backup-name: resource_backup
+    cpdbr.cpd.ibm.com/backup-seq: "7"
+    cpdbr.cpd.ibm.com/br-mode: online
+    cpdbr.cpd.ibm.com/dpas-plan-version: 2.0.0
+    cpdbr.cpd.ibm.com/dpas-provider: velero
+    cpdbr.cpd.ibm.com/orchestration-type: service
+    cpdbr.cpd.ibm.com/orchestration-version: 1.0.0
+    cpdbr.cpd.ibm.com/tenant-backup-name: cpd-oadp-tenant-backup-2
+    cpdbr.cpd.ibm.com/trace-id: a82a0796-e6b6-4f48-bf28-ae7533468696
+    velero.io/storage-location: dpa-sample-1
+  name: cpd-tenant-91a299d6-4d12-11f0-8697-72b7af6a8d07
+  namespace: openshift-adp
+  resourceVersion: "654305781"
+  uid: f71a8945-b134-4b87-86b3-a185beafc2b5
+spec:
+  csiSnapshotTimeout: 10m0s
+  defaultVolumesToFsBackup: false
+  excludedResources:
+  - events
+  - events.events.k8s.io
+  - imagetags.openshift.io
+  - pods
+  - subscriptions.operators.coreos.com
+  - clusterserviceversions.operators.coreos.com
+  - installplans.operators.coreos.com
+  - clients.oidc.security.ibm.com
+  - authentications.operator.ibm.com
+  - challenges.acme.cert-manager.io
+  - orders.acme.cert-manager.io
+  - certificaterequests.cert-manager.io
+  hooks: {}
+  includeClusterResources: true
+  includedNamespaces:
+  - cpd-operators
+  - cpd-instance
+  includedResources:
+  - '*'
+  itemOperationTimeout: 4h0m0s
+  labelSelector:
+    matchExpressions:
+    - key: icpdsupport/ignore-on-nd-backup
+      operator: NotIn
+      values:
+      - "true"
+  metadata: {}
+  snapshotMoveData: false
+  snapshotVolumes: false
+  storageLocation: dpa-sample-1
+  ttl: 8760h0m0s
+status:
+  completionTimestamp: "2025-06-19T13:38:19Z"
+  expiration: "2026-06-19T13:37:36Z"
+  formatVersion: 1.1.0
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsBackedUp: 7651
+    totalItems: 7651
+  startTimestamp: "2025-06-19T13:37:36Z"
+  version: 1
