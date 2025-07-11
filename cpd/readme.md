@@ -82,7 +82,6 @@ This image embed the
  - a bunch of kubernetes utility (helm, kubernetes)
  - cpd-cli and its plugins 
  - oc command line 
- - cpd-vars.sh that will be sourced in the blueprint to export several variables
 
 ```
 # change this according to your registry/image 
@@ -189,7 +188,7 @@ In the container check that you can list the tenant backup that you already crea
 ```
 export HOME=/tmp
 cd /tmp/
-# change it if you use another name
+# change it if you use another namespace for OADP
 OADP_PROJECT=openshift-adp
 cpd-cli oadp client config set namespace=$OADP_PROJECT
 cpd-cli oadp tenant-backup list
@@ -242,7 +241,7 @@ For instance let's say you want to restore the `cpd-operators` and `cpd-instance
 In the Kasten UI find the restorepoint you're looking for 
 ![cpd restorepoints](./images/cpd-restorepoints.png)
 
-and retreive the `tenantBackupName` associated to this restorepoint in the kanister section
+and retrieve the `tenantBackupName` associated to this restorepoint in the kanister section
 ![Tenant backup name](./images/tenantBackupName.png)
 
 ### 2. Use the tool container 
@@ -281,7 +280,9 @@ cpd-cli oadp tenant-restore create ${TENANT_BACKUP_NAME}-restore \
 --log-level=debug
 ```
 
-Now connect to cpd and check you retreive the notebook you created during the watson tutorial.
+Now connect to cpd and check you find back the notebook you created during the watson tutorial.
+
+In my case the restore process was taking 2 hours.
 
 # Delete a backup
 
@@ -297,7 +298,7 @@ For instance let's say you want to delete the <date> tenant backup.
 In the Kasten UI find the restorepoint you're looking for 
 ![cpd restorepoints](./images/cpd-restorepoints.png)
 
-and retreive the `tenantBackupName` associated to this restorepoint in the kanister section
+and retrieve the `tenantBackupName` associated to this restorepoint in the kanister section
 ![Tenant backup name](./images/tenantBackupName.png)
 
 ### 2. Execute the delete 
@@ -329,6 +330,6 @@ cpd-cli oadp tenant-backup delete ${TENANT_BACKUP_NAME} \
 
 The next steps will be 
 - automate restore in the blueprint 
-- automate delete in the blueprint
+
 
 Coming soon ...
