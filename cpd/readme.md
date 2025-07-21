@@ -229,30 +229,11 @@ oc logs -n cpd-kasten -l createdBy=kanister -f
 
 # Restore a backup
 
-For the moment we don't support automatic restore with the blueprint. 
-
-Instead you can use the [tool container](#create-a-tool-container) 
-
-## example : restore a tenant backup
-
-### 1. find the tenant backup name
-For instance let's say you want to restore the `cpd-operators` and `cpd-instance` "Today 4:68" backup.
-
-In the Kasten UI find the restorepoint you're looking for 
-![cpd restorepoints](./images/cpd-restorepoints.png)
-
-and retrieve the `tenantBackupName` associated to this restorepoint in the kanister section
-![Tenant backup name](./images/tenantBackupName.png)
-
-### 2. Use the tool container 
+You need first to remove manually the cpd instance, operators and scheduling namespace. 
 
 Follow the same process described in Test the [cpd-cli container](#test-the-container) and shell to it. 
 
-### 3. Execute the restore 
-
-We are now in the container and we are going to follow the procedure described in the IBM documentation.
-- we  [clean up the cpd-operators and cpd-instance](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-backup-restore-software-hub-oadp-utility#reference_nll_kjz_tcc) namespace.
-- we [restore them](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-backup-restore-software-hub-oadp-utility#reference_rv1_blm_ddc__title__3). 
+In the container, follow the procedure described in the IBM documentation. [clean up the cpd-operators and cpd-instance](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-backup-restore-software-hub-oadp-utility#reference_nll_kjz_tcc) namespace.
 
 ```
 # create the env variable 
@@ -270,19 +251,10 @@ cpd-cli oadp client config set namespace=$OADP_PROJECT
 /cpd-kasten-script/no-ns-in-terminating-state.sh
 
 # cleanup the namespaces cpd-operators and cpd-instance before restoring
-/cpd-kasten-script/cpd-pre-restore-cleanup.sh --additional-namespaces="cpd-operators,cpd-instance"
-
-# set the tenant backup name and restore it 
-TENANT_BACKUP_NAME=<the tenant backup name you get in the restore point>
-cpd-cli oadp tenant-restore create ${TENANT_BACKUP_NAME}-restore \
---from-tenant-backup ${TENANT_BACKUP_NAME} \
---verbose \
---log-level=debug
+/cpd-kasten-script/cpd-pre-restore-cleanup.sh --additional-namespaces="$PROJECT_CPD_INST_OPERANDS,$PROJECT_CPD_INST_OPERATORS,$PROJECT_SCHEDULING_SERVICE"
 ```
 
-Now connect to cpd and check you find back the notebook you created during the watson tutorial.
-
-In my case the restore process was taking 2 hours.
+Now in Kasten find the restore point and simply click restore.
 
 # Delete a backup
 
