@@ -256,24 +256,40 @@ actions:
             # control that namespace $PROJECT_CPD_INST_OPERANDS, $PROJECT_CPD_INST_OPERATORS and $PROJECT_SCHEDULING_SERVICE are deleted
             # otherwise the restore will fail
             if kubectl get namespace $PROJECT_CPD_INST_OPERANDS; then
-              echo "Namespace $PROJECT_CPD_INST_OPERANDS still exists, please delete it before restoring "
+              echo "Namespace $PROJECT_CPD_INST_OPERANDS still exists, please delete it before restoring https://github.com/kastendevhub/enterprise-blueprint/tree/main/cpd#restore-a-backup"
               exit 1
             fi
             if kubectl get namespace $PROJECT_CPD_INST_OPERATORS; then
-              echo "Namespace $PROJECT_CPD_INST_OPERATORS still exists, please delete it before restoring "
+              echo "Namespace $PROJECT_CPD_INST_OPERATORS still exists, please delete it before restoring https://github.com/kastendevhub/enterprise-blueprint/tree/main/cpd#restore-a-backup"
               exit 1
-            fi
+            fi       
             if kubectl get namespace $PROJECT_SCHEDULING_SERVICE; then
-              echo "Namespace $PROJECT_SCHEDULING_SERVICE still exists, please delete it before restoring "
+              echo "Namespace $PROJECT_SCHEDULING_SERVICE still exists, please delete it before restoring https://github.com/kastendevhub/enterprise-blueprint/tree/main/cpd#restore-a-backup"
               exit 1
-            fi
+            fi         
 
             echo "============================================================================"
-            echo "Deleting the scheduling service backup"
+            echo "Restoring the scheduling service backup"
             echo "============================================================================"
-            cpd-cli oadp backup delete $SCHEDULING_BACKUP_NAME
+            cpd-cli oadp client config set cpd-namespace=${PROJECT_SCHEDULING_SERVICE}            
+            echo "scheduling service restore"
+            cpd-cli oadp restore create ${SCHEDULING_BACKUP_NAME}-restore \
+            --from-backup=${SCHEDULING_BACKUP_NAME} \
+            --include-resources='operatorgroups,configmaps,catalogsources.operators.coreos.com,subscriptions.operators.coreos.com,customresourcedefinitions.apiextensions.k8s.io,scheduling.scheduler.spectrumcomputing.ibm.com' \
+            --include-cluster-resources=true \
+            --skip-hooks \
+            --log-level=debug \
+            --verbose
+                        
+            
+            echo "============================================================================"
+            echo "Restoring the tenant backup"
+            echo "============================================================================"
+            cpd-cli oadp tenant-restore create ${TENANT_BACKUP_NAME}-restore \
+              --from-tenant-backup ${TENANT_BACKUP_NAME} \
+              --verbose \
+              --log-level=debug
 
-            echo "============================================================================"
-            echo "Deleting the tenant backup"
-            echo "============================================================================"
-            cpd-cli oadp tenant-backup delete $TENANT_BACKUP_NAME
+            echo "Get the status of the tenant restore"
+            cpd-cli oadp tenant-restore status ${TENANT_BACKUP_NAME}-restore
+            echo "Tenant restore completed successfully"

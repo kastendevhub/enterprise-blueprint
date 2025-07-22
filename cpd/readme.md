@@ -229,11 +229,14 @@ oc logs -n cpd-kasten -l createdBy=kanister -f
 
 # Restore a backup
 
-You need first to remove manually the cpd instance, operators and scheduling namespace. 
+You need first to remove manually the cpd instance, operators and scheduling service. 
 
 Follow the same process described in Test the [cpd-cli container](#test-the-container) and shell to it. 
 
 In the container, follow the procedure described in the IBM documentation. [clean up the cpd-operators and cpd-instance](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-backup-restore-software-hub-oadp-utility#reference_nll_kjz_tcc) namespace.
+
+There is also instructions for [uninstalling the scheduling service](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=services-uninstalling-scheduling-service) but 
+they were not successful for us and it was simpler to remove entiremy and restore the scheduling service.
 
 ```
 # create the env variable 
@@ -250,58 +253,23 @@ cpd-cli oadp client config set namespace=$OADP_PROJECT
 # check no namespace are in terminating state otherwise restore fails
 /cpd-kasten-script/no-ns-in-terminating-state.sh
 
-# cleanup the namespaces cpd-operators and cpd-instance before restoring
+# cleanup the cps namespaces operators, instance and scheduling before restoring
 /cpd-kasten-script/cpd-pre-restore-cleanup.sh --additional-namespaces="$PROJECT_CPD_INST_OPERANDS,$PROJECT_CPD_INST_OPERATORS,$PROJECT_SCHEDULING_SERVICE"
 ```
 
-Now in Kasten find the restore point and simply click restore.
+Now in Kasten find the restore point and simply click restore this will restore the cpd operator, instance and scheduling namespace.
 
 # Delete a backup
 
-For the moment we don't support automatic delete with the blueprint.
+Delete the restores point and it will delete the cpd-oadp backup artifacts.
 
-Instead you can use the [tool container](#create-a-tool-container) for executing this operation.
-
-## example : delete a tenant backup
-
-### 1. find the tenant backup name
-For instance let's say you want to delete the <date> tenant backup.
-
-In the Kasten UI find the restorepoint you're looking for 
-![cpd restorepoints](./images/cpd-restorepoints.png)
-
-and retrieve the `tenantBackupName` associated to this restorepoint in the kanister section
-![Tenant backup name](./images/tenantBackupName.png)
-
-### 2. Execute the delete 
-
-Connect to the [tool container](#create-a-tool-container) and execute 
-
-```
-# create the env variable 
-export PROJECT_CPD_INST_OPERANDS="cpd-instance" 
-export PROJECT_CPD_INST_OPERATORS="cpd-operators" 
-export PROJECT_SCHEDULING_SERVICE="ibm-cpd-scheduler" 
-export OADP_PROJECT="openshift-adp"
-
-# set up the cpd-cli oadp client
-export HOME=/tmp
-cd /tmp/
-cpd-cli oadp client config set namespace=$OADP_PROJECT
-
-
-# set the tenant backup name and delete it 
-TENANT_BACKUP_NAME=<the tenant backup name you get in the restore point>
-# TODO check this command
-cpd-cli oadp tenant-backup delete ${TENANT_BACKUP_NAME} \
---verbose \
---log-level=debug
-```
+If your policy define a retention, deletion will happen automatically following the retention table.
 
 # Nest steps 
 
 The next steps will be 
-- automate restore in the blueprint 
+- Offline backup (instead of online backup)
+- Disaster recovery
 
 
 Coming soon ...
