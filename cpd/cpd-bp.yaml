@@ -84,7 +84,7 @@ actions:
       args:
         image: michaelcourcy/kasten-cpd:k108.0.2-cpd5.1.x
         namespace: '{{ .Object.metadata.namespace }}'
-        # the cpd-cli generate a lot of logs when doing a nackup 
+        # the cpd-cli generate a lot of logs when doing a backup 
         # we need a dedicated ephemeral storage to avoid overwhelming the node 
         podOverride:            
           containers:
@@ -227,9 +227,15 @@ actions:
     - cpdOutput
     phases:
     - func: KubeTask
-      name: restoreSchedulingBackupAndTenantBackup
+      name: restoreSchedulingAndTenant      
+      objects:
+          cpdVars:
+            kind: Secret
+            name: 'cpd-vars'
+            namespace: '{{ .Object.metadata.namespace }}'
       args:
         image: michaelcourcy/kasten-cpd:k108.0.2-cpd5.1.x        
+        namespace: '{{ .Object.metadata.namespace }}'
         command:
           - bash
           - -o
@@ -241,7 +247,7 @@ actions:
           - |   
             
             echo "applying cpd-vars defined in the secret"
-            {{- range $key, $value := .Phases.backupSchedulingAndTenant.Secrets.cpdVars.Data }}
+            {{- range $key, $value := .Phases.restoreSchedulingAndTenant.Secrets.cpdVars.Data }}
             export {{ $key }}={{ $value | toString }}
             {{- end }} 
 
