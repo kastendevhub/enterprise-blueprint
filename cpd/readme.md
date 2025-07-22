@@ -23,7 +23,6 @@ The blueprint and the guide that comes along is focussed on [CPD](https://www.ib
 
 This is the first version of this blueprint and it has this limitations :
    - We support only Online backup not Offline 
-   - We support for the moment only the `backup` action not yet the `restore` and `delete`
    - We support only component that does not require specfic backup procedure (most of them does not require specific procedures)
    - We support only restore on the same cluster not on another cluster
    - We don't use the Kasten datamover but leverage the OADP datamover (more on this later)
