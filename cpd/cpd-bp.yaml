@@ -236,6 +236,24 @@ actions:
       args:
         image: michaelcourcy/kasten-cpd:k108.0.2-cpd5.1.x        
         namespace: '{{ .Object.metadata.namespace }}'
+        # the cpd-cli generate a lot of logs when doing a backup 
+        # we need a dedicated ephemeral storage to avoid overwhelming the node 
+        podOverride:            
+          containers:
+          - name: container
+            volumeMounts:
+            - name: ephemeral-storage
+              mountPath: /tmp
+          volumes:
+          - name: ephemeral-storage
+            ephemeral:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                # storageClassName: "managed-csi"
+                  resources:
+                    requests:                      
+                      storage: 2Gi
         command:
           - bash
           - -o
