@@ -264,6 +264,8 @@ actions:
           - -c
           - |   
             
+            restoreDate=$(date +%Y%m%d-%H%M%S)
+
             echo "applying cpd-vars defined in the secret"
             {{- range $key, $value := .Phases.restoreSchedulingAndTenant.Secrets.cpdVars.Data }}
             export {{ $key }}={{ $value | toString }}
@@ -297,7 +299,7 @@ actions:
             echo "============================================================================"
             cpd-cli oadp client config set cpd-namespace=${PROJECT_SCHEDULING_SERVICE}            
             echo "scheduling service restore"
-            cpd-cli oadp restore create ${SCHEDULING_BACKUP_NAME}-restore \
+            cpd-cli oadp restore create ${SCHEDULING_BACKUP_NAME}-restore-${restoreDate} \
             --from-backup=${SCHEDULING_BACKUP_NAME} \
             --include-resources='operatorgroups,configmaps,catalogsources.operators.coreos.com,subscriptions.operators.coreos.com,customresourcedefinitions.apiextensions.k8s.io,scheduling.scheduler.spectrumcomputing.ibm.com' \
             --include-cluster-resources=true \
@@ -309,7 +311,7 @@ actions:
             echo "============================================================================"
             echo "Restoring the tenant backup"
             echo "============================================================================"
-            cpd-cli oadp tenant-restore create ${TENANT_BACKUP_NAME}-restore \
+            cpd-cli oadp tenant-restore create ${TENANT_BACKUP_NAME}-restore-${restoreDate} \
               --from-tenant-backup ${TENANT_BACKUP_NAME} \
               --verbose \
               --log-level=debug
