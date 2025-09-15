@@ -4,7 +4,9 @@ metadata:
   name: mssql-bp
   namespace: kasten-io
 actions:
-  backup:
+  # we use preBackupHook because we need to ensure the creation of the full and logs backups file for the different databases 
+  # are created before we snapshots the PVCs that are attached to this custom resource.
+  preBackupHook:
     outputArtifacts:
       mssqlCloudDump:
         keyValue:
@@ -171,7 +173,9 @@ actions:
             fi
             kubectl annotate DxEnterpriseSqlAg --overwrite -n {{ .Object.metadata.namespace }} {{ .Object.metadata.name }} kasten.io/counterLogBackups=$counterLogBackups
             kando output counterLogBackups $counterLogBackups
-  restore:
+  # We use postRestoreHook because we need to ensure the PVCs are fully restored with all the logs and fill backups file 
+  # before we start working with them.
+  postRestoreHook:
     inputArtifactNames:
       - mssqlCloudDump
     phases:
