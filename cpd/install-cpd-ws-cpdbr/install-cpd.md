@@ -5,12 +5,13 @@
 We need the Cloud Pak for Data command-line interface otherwise known as cpd-cli. You'll find its release in their [github repository](https://github.com/IBM/cpd-cli), go to [releases](https://github.com/IBM/cpd-cli/releases) and choose a version that suits your OS.
 
 ```
+cd cpd/install-cpd-ws-cpdbr
 wget https://github.com/IBM/cpd-cli/releases/download/v14.1.3/cpd-cli-darwin-EE-14.1.3.tgz
 tar xvzf cpd-cli-darwin-EE-14.1.3.tgz
 ./cpd-cli-darwin-EE-14.1.3-1968/cpd-cli version
 ```
 
-The previous command automatically generated folders in your current directory 
+The previous command automatically generated folders in your current directory which are git-ignored.
 - cpd-cli-darwin-EE-14.1.3-1968
 - cpd-cli-workspace
 
@@ -99,7 +100,38 @@ oc adm policy add-cluster-role-to-user cluster-admin cpdadmin
 
 ## Installing the Red Hat OpenShift Container Platform cert-manager Operator
 
-Documentation is [here](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-installing-cert-manager-operator). 
+Documentation is [here](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-installing-cert-manager-operator).
+
+## Verifying OpenShift and CPD Version Compatibility
+
+**Before proceeding with the installation, always verify that your OpenShift version is supported by your chosen CPD version.**
+
+### Check your OpenShift version
+```bash
+oc version
+```
+
+### Check CPD version compatibility
+Use the cpd-cli health cluster command to verify compatibility:
+```bash
+cpd-cli health cluster
+```
+
+Look for the "Cluster Version Check" section in the output:
+```
+Cluster Version Check                                                      
+Checks if the Red Hat OpenShift version is supported by IBM Software Hub   
+[SUCCESS...]  The location version matches with 4.12,4.13,4.14,4.15,4.16
+```
+
+If you see a **[WARN...]** or **[FAIL...]** message instead, your OpenShift version is not supported by the current CPD version.
+
+### CPD Version Matrix (Reference)
+- **CPD 5.1.x**: Supports OpenShift 4.12, 4.13, 4.14, 4.15, 4.16
+- **CPD 5.2.x**: Supports OpenShift 4.16, 4.17, 4.18 (check IBM documentation for exact versions)
+- **CPD 5.3.x**: Supports newer OpenShift versions (check IBM documentation)
+
+**⚠️ Important:** Using an unsupported OpenShift version can lead to installation failures, authentication issues, networking problems, and RBAC errors. Always use a compatible version combination.
 
 In our cluster cert manager was already installed for other reason but still using the operator hub.
 
@@ -192,6 +224,24 @@ source ./cpd-vars.sh
 ${CPDM_OC_LOGIN}
 ```
 
+The last command `${CPDM_OC_LOGIN}` os using your local docker or podman installation and spin up a container that has the necessary ansible playbook for the rest 
+of the installation.
+
+It should end up with this output
+```
+KUBECONFIG is /opt/ansible/.kubeconfig
+WARNING: Using insecure TLS client config. Setting this option is not supported!
+
+Login successful.
+
+You have access to 83 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "default".
+Using project "default" on server "https://api.kasten-se-lab-baremetal.kasten.veeam.local:6443".
+[SUCCESS] 2025-08-14T11:25:01.134749Z You may find output and logs in the /Users/michaelcourcy/kasten.io/github/enterprise-blueprint/cpd/install-cpd-ws-cpdbr/cpd-cli-workspace/work directory.
+[SUCCESS] 2025-08-14T11:25:01.134798Z The login-to-ocp command ran successfully.
+```
+
 ## Preparing your cluster for IBM Cloud Pak for Data
 
 ### Updating the global image pull secret for IBM Cloud Pak for Data
@@ -226,7 +276,7 @@ oc new-project ${PROJECT_SCHEDULING_SERVICE}
 
 ## Installing shared cluster components for IBM Software Hub
 
-[Documentation](./https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-installing-shared-components)
+[Documentation](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=cluster-installing-shared-components)
 
 Install the cluster components 
 ```
@@ -255,6 +305,90 @@ Wait for the cpd-cli to return the following message before proceeding to the ne
 ```
 [SUCCESS] 2025-06-03T14:37:22.392406Z The apply-scheduler command ran successfully.
 ```
+
+**Note: RBAC Issue and Resolution**
+
+We encountered an RBAC privilege escalation error during the scheduler installation. The operator failed with this message:
+
+```
+"ibm-cpd-scheduler-kube-sched-crb" is forbidden:
+user "system:serviceaccount:ibm-cpd-scheduler:ibm-cpd-scheduling-operator" (groups=["system:serviceaccounts" "system:serviceaccounts:ibm-cpd-scheduler" "system:authenticated"])
+is attempting to grant RBAC permissions not currently held:
+{APIGroups:["storage.k8s.io"], Resources:["volumeattachments"], Verbs:["get" "list" "watch"]},"reason":"Forbidden","details":{"name":"ibm-cpd-scheduler-kube-sched-crb","group":"rbac.authorization.k8s.io","kind":"clusterrolebindings"},"code":403}
+```
+
+**Root Cause:**
+- The operator needs to create a ClusterRoleBinding for the `system:kube-scheduler` ClusterRole (which includes `volumeattachments` permissions)
+- Kubernetes RBAC prevents privilege escalation - a service account cannot grant permissions it doesn't already hold
+- The operator service account (`ibm-cpd-scheduling-operator`) doesn't have `volumeattachments` permissions, so it cannot create the required ClusterRoleBinding
+
+**Investigation:**
+We confirmed the issue using impersonation:
+```bash
+oc auth can-i get volumeattachments --as=system:serviceaccount:ibm-cpd-scheduler:ibm-cpd-scheduling-operator
+# Returns: no
+```
+
+**Resolution:**
+Since only users with existing permissions can grant those permissions to others, we manually created the ClusterRoleBinding as cluster-admin:
+
+```bash
+cat << 'EOF' | oc apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ibm-cpd-scheduler-kube-sched-crb
+  labels:
+    app.kubernetes.io/instance: cpd-scheduler
+    app.kubernetes.io/managed-by: ansible
+    app.kubernetes.io/name: ibm-cpd-scheduler
+    icpdsupport/addOnId: scheduling
+    lsfcluster: ibm-cpd-scheduler
+    lsftype: ibm-wmla-pod-scheduler-prod
+    release: cpd-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-scheduler
+subjects:
+- kind: ServiceAccount
+  name: ibm-cpd-scheduling-operator
+  namespace: ibm-cpd-scheduler
+EOF
+```
+
+**Operator Recovery:**
+After creating the ClusterRoleBinding, the operator was stuck in a "Failed" state and required a restart to resume reconciliation:
+
+```bash
+# Restart the operator pod to clear the failed state
+oc delete pod -n ibm-cpd-scheduler -l name=ibm-cpd-scheduling-operator
+
+# Verify the operator resumes and completes successfully
+oc get scheduling ibm-cpd-scheduler -n ibm-cpd-scheduler
+```
+
+**Outcome:**
+The scheduler installation completed successfully with all components running.
+
+**Root Cause Identified:**
+The RBAC issue was likely caused by an OpenShift version compatibility problem. The `cpd-cli health cluster` command revealed:
+
+```
+Checks if the Red Hat OpenShift version is supported by IBM Software Hub   
+[WARN...]  The location version does not match with                        
+4.12,4.13,4.14,4.15,4.16                                                   
+Current Cluster Version is 4.18.21  
+```
+
+**Analysis:**
+- CPD 5.1.3 was designed and tested for OpenShift versions 4.12-4.16
+- The cluster is running OpenShift 4.18.21, which is newer than the supported range
+- The operator's RBAC configuration may not account for changes in newer OpenShift versions
+- This version mismatch likely explains why the operator lacks the necessary permissions to create the required ClusterRoleBinding
+
+**Recommendation:**
+For production deployments, use a supported OpenShift version (4.12-4.16) to avoid compatibility issues. If you must use a newer OpenShift version, be prepared to manually resolve RBAC issues as demonstrated above.
 
 
 ## Configuring persistent storage for IBM Software Hub
@@ -430,6 +564,18 @@ If all go well you should get this message
 [✔] [SUCCESS] The cpd management server was successfully created in the cpd-instance project
 [SUCCESS] 2025-06-03T18:26:56.757250Z You may find output and logs in the /Users/michaelcourcy/kasten.io/github/kasten-cpd/cpd-cli-workspace/work directory.
 [SUCCESS] 2025-06-03T18:26:56.757430Z The setup-instance command ran successfully.
+```
+
+This step is long and can last up to 2 hours. You can monitor progress with 
+```
+# Check overall CPD platform progress
+oc get ibmcpd ibmcpd-cr -n cpd-instance -o jsonpath='{.status.progress}' && echo
+
+# Check zen service progress  
+oc get zenservice lite-cr -n cpd-instance -o jsonpath='{.status.progress}' && echo
+
+# Watch deployments being created
+oc get deployment -n cpd-instance --watch
 ```
 
 Confirm that the status of the operands is Completed:
