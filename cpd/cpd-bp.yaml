@@ -101,7 +101,7 @@ actions:
                 # storageClassName: "managed-csi"
                   resources:
                     requests:                      
-                      storage: 2Gi
+                      storage: 5Gi
         command:
           - bash
           - -o
@@ -253,7 +253,7 @@ actions:
                 # storageClassName: "managed-csi"
                   resources:
                     requests:                      
-                      storage: 2Gi
+                      storage: 5Gi
         command:
           - bash
           - -o
