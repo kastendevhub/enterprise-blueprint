@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongoce-backup-pvc
+  namespace: mongoce
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mongoce-backup
+  namespace: mongoce
+  labels:
+    app: mongoce-backup
+spec:
+  securityContext: 
+    runAsNonRoot: true 
+    seccompProfile: 
+      type: "RuntimeDefault"
+  containers:
+  - name: mongoce-backup
+    image: mongo:6.0
+    command: ["/bin/bash", "-c", "while true; do sleep 30; done"]
+    env:
+    - name: MONGO_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mas-mongo-ce-admin-admin
+          key: password        
+    volumeMounts:
+    - name: tls-ca
+      mountPath: /var/lib/tls/ca
+      readOnly: true
+    - name: tls-cert
+      mountPath: /var/lib/tls/server
+      readOnly: true
+    - name: backup-storage
+      mountPath: /data/mongo/dumps
+  volumes:
+  - name: tls-ca
+    secret:
+      secretName: mongo-ca-secret
+      items:
+        - key: ca.crt
+          path: ca.crt
+  - name: tls-cert
+    secret:
+      secretName: mongo-cert-secret
+      items:
+        - key: mongo.pem
+          path: mongo.pem
+  - name: backup-storage
+    persistentVolumeClaim:
+      claimName: mongoce-backup-pvc
+  imagePullSecrets:
+    - name: my-dockerhub-secret
+  restartPolicy: Never

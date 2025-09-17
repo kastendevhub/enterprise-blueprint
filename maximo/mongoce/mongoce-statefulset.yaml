@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mas-mongo-ce-svc
+  namespace: mongoce
+spec:
+  ports:
+    - port: 27017
+  clusterIP: None
+  selector:
+    app: mas-mongo-ce
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mas-mongo-ce
+  namespace: mongoce
+spec:
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+  serviceName: "mas-mongo-ce-svc"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mas-mongo-ce
+  template:
+    metadata:
+      labels:
+        app: mas-mongo-ce
+    spec:      
+      imagePullSecrets:
+        - name: my-dockerhub-secret
+      initContainers:
+      - name: copy-keyfile
+        image: mongo:6.0
+        command: ["sh", "-c", "cp /from-secret/mongo-keyfile /to-keyfile/mongo-keyfile && chmod 400 /to-keyfile/mongo-keyfile"]
+        volumeMounts:
+          - name: keyfile
+            mountPath: /from-secret
+            readOnly: true
+          - name: keyfile-writable
+            mountPath: /to-keyfile
+      containers:
+        - name: mongod
+          image: mongo:6.0
+          command:
+            - mongod
+            - "--replSet=mas-mongo-ce"
+            - "--bind_ip_all"
+            - "--auth"
+            - "--keyFile=/etc/secrets/mongo-keyfile"
+            - "--tlsMode=requireTLS"
+            - "--tlsCAFile=/var/lib/tls/ca/ca.crt"
+            - "--tlsCertificateKeyFile=/var/lib/tls/server/mongo.pem"
+            - "--tlsAllowConnectionsWithoutCertificates"
+            - "--tlsAllowInvalidCertificates"
+            - "--tlsAllowInvalidHostnames"
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: tls-ca
+              mountPath: /var/lib/tls/ca
+              readOnly: true
+            - name: tls-cert
+              mountPath: /var/lib/tls/server
+              readOnly: true
+            - name: data
+              mountPath: /data/db
+            - name: keyfile-writable
+              mountPath: /etc/secrets
+              readOnly: false
+      volumes:
+        - name: tls-ca
+          secret:
+            secretName: mongo-ca-secret
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: tls-cert
+          secret:
+            secretName: mongo-cert-secret
+            items:
+              - key: mongo.pem
+                path: mongo.pem
+        - name: keyfile
+          secret:
+            secretName: mongo-keyfile
+            defaultMode: 256  # 0400 in decimal
+        - name: keyfile-writable
+          emptyDir: {}
