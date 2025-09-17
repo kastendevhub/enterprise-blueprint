@@ -199,6 +199,14 @@ NAME                            MODE    ORCHESTRATION   RESOLVED_NAMESPACES     
 cpd-oadp-tenant-backup-2        online  service         cpd-operators,cpd-instance      Completed       0       0               2025-06-19 3:30:01 PM   2025-06-19 3:38:40 PM   -             
 ```
 
+Check whether the services that you are using support platform backup and restore by [reviewing Services that support backup and restore](https://www.ibm.com/docs/en/SSNFH6_5.1.x/hub/admin/backup_restore_service_list.html). You can also run the following command:
+```
+cpd-cli oadp service-registry check \
+--tenant-operator-namespace ${PROJECT_CPD_INST_OPERATORS} \
+--verbose \
+--log-level debug
+```
+
 
 # Create a backup policy and follow up the operations
 
