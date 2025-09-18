@@ -4,7 +4,7 @@ Implement the backup and restore worflow as described in [Maximo documentation](
 
 # Components 
 
-Backup and restore of IBM Maximo consist on backing up several component 
+Backup and restore of IBM Maximo consist on backing up several components
 
 - MongoDB for Maximo Application Suite 
 - Maximo Application Suite Core 
