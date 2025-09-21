@@ -67,7 +67,7 @@ spec:
             - name: tls-ca
               mountPath: /var/lib/tls/ca
               readOnly: true
-            - name: tls-cert
+            - name: tls-secret
               mountPath: /var/lib/tls/server
               readOnly: true
             - name: data
@@ -78,13 +78,13 @@ spec:
       volumes:
         - name: tls-ca
           secret:
-            secretName: mongo-ca-secret
+            secretName: mas-mongo-ce-ca-certificate
             items:
               - key: ca.crt
                 path: ca.crt
-        - name: tls-cert
+        - name: tls-secret
           secret:
-            secretName: mongo-cert-secret
+            secretName: mas-mongo-ce-server-certificate-key
             items:
               - key: mongo.pem
                 path: mongo.pem

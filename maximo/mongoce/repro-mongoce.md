@@ -44,11 +44,11 @@ cat mongo.crt mongo.key > mongo.pem
 ```
 oc create namespace mongoce  
 
-oc create secret generic mongo-ca-secret \
+oc create secret generic mas-mongo-ce-ca-certificate \
   --from-file=ca.crt=ca.crt \
   -n mongoce
 
-oc create secret generic mongo-cert-secret \
+oc create secret generic mas-mongo-ce-server-certificate-key \
   --from-file=mongo.pem=mongo.pem \
   -n mongoce
 ```
