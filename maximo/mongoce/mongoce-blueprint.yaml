@@ -107,13 +107,15 @@ actions:
           - pipefail
           - -c
           - |
-            echo "Starting mongodump for mas_dev_catalog"
-            mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_dev_core.archive -d mas_dev_core
-            echo "Completed mongodump for mas_dev_catalog"
-            echo "Starting mongodump for mas_dev_catalog"
-            mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_dev_catalog.archive -d mas_dev_catalog
-            echo "Completed mongodump for mas_dev_catalog"
-  postBackupHook:    
+            # TODO this may be autodiscovered ? 
+            MAS_INSTANCE_ID="dev"
+            echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_core"
+            mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
+            echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_core"
+            echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_catalog"
+            mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_catalog.archive -d mas_${MAS_INSTANCE_ID}_catalog
+            echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_catalog"
+  postBackupHook:
     phases:
     - func: KubeOps
       name: deleteMongoBackupPod

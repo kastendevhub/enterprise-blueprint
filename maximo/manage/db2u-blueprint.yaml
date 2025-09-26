@@ -1,0 +1,49 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata:
+  name: db2u-blueprint
+  namespace: kasten-io
+  annotations:
+    category: database
+    description: Blueprint to suspend and resume Maximo Application Suite Manage during snapshot
+actions:
+  preBackupHook:    
+    phases:
+    - func: KubeExec
+      name: suspendDb2Writing
+      args:
+        namespace: "{{ .Namespace.Name }}"
+        ## adapt to the name of the statefulset
+        pod: c-mas-masdev-masdev-manage-db2u-0
+        container: db2u
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            manage_snapshots --action suspend
+            # improve return an error if not successful
+            wvcli system status
+  postBackupHook:    
+    phases:
+    - func: KubeExec
+      name: resumeDb2Writing
+      args:
+        namespace: "{{ .Namespace.Name }}"
+        ## adapt to the name of the statefulset
+        pod: c-mas-masdev-masdev-manage-db2u-0
+        container: db2u
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            manage_snapshots --action resume
+            # improve return an error if not successful
+            wvcli system status

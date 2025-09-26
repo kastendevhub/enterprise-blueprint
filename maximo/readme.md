@@ -23,7 +23,7 @@ Backup and restore of IBM Maximo consist on backing up several components
 In this enterprise blueprint we only support the 3 first components 
 
 - [MongoDB for Maximo Application Suite](./mongoce/)
-- Maximo Application Suite Core (coming soon)
-- Maximo Manage (coming soon)
+- [Maximo Application Suite Core](./suitecore/) (
+- [Maximo Manage](./manage/)
 
-But we'll include the rest in the future depending of our availability and customer request.
+But we'll include the rest in the future depending of our availability and customer requests.

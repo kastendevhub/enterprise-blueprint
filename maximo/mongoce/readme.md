@@ -15,22 +15,24 @@ If you need to repro an environment close to the mongoce [we provide a guide](./
 We will create a mongoce-backup pod which is a mongo client that will store the dump in it's own pvc before we backup the mongoce namespace.
 
 ```
-oc create -f mongoce-backup.yaml
+oc create -n mongoce -f mongoce-backup.yaml
 ```
 
 The operation you see here is what the blueprint will do. You can execute them to check if this is working in your own environment : 
 
 ```
-oc exec -it mongoce-backup -- bash 
+oc exec -n mongoce -it mongoce-backup -- bash 
 
-# in the pod create the dump of mas_dev_core and mas_dev_catalog
+# in the pod create the dump of mas_{MAS_INSTANCE_ID}_core and mas_{MAS_INSTANCE_ID}_catalog
 
-mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_dev_core.archive -d mas_dev_core
+MAS_INSTANCE_ID="dev"
 
-mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_dev_catalog.archive -d mas_dev_catalog
+mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
+
+mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_catalog.archive -d mas_${MAS_INSTANCE_ID}_catalog
 ```
 
-Notice that by using the `--uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin"` one don't need to look for the primary this url will always select the primary.
+Notice that by using the `--uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin"` one doesn't need to look for the primary this url will always select the primary.
 
 Once you finished your tests delete the pod and its pvc 
 ```
@@ -43,22 +45,7 @@ oc delete -f mongoce-backup.yaml
 oc create -f mongoce-blueprint.yaml 
 ```
 
-The blueprint will execute the same steps you did in your test 
-* preBackupHook
-    1. create a backup pvc and a backup pod 
-    2. wait for the pod to be ready 
-    2. Create the dump of the core and catalog database 
-* backup : Kasten backup the pod and its pvc containing the dumps
-* postBackupHook 
-    1. delete the backup pod 
-    2. delete the backup pvc 
-
-
-
-## Execute the blueprint 
-
-In order to execute the blueprint you need to create a policy to backup the mongoce namespace and 
-set up the preBackupHook action and postBackupHookAction
+The `preBackupHook` and `postBackupHook` must be applied before and after the policy execute.
 
 ![Setting up pre and post backup hook](./pre-post-snapshot-actions-hook.png)
 

@@ -1,0 +1,53 @@
+## this policy should be used only if you have a custome cert-manager
+## To check if you are using a custom cert-manager, run the following command:
+## oc get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml | yq '.spec | has("certificateIssuer")') 
+apiVersion: config.kio.kasten.io/v1alpha1
+kind: Policy
+metadata:
+  name: mas-cert-manager
+  namespace: kasten-io
+spec:
+  comment: ""
+  frequency: "@onDemand"
+  paused: false
+  actions:
+    - action: backup
+      backupParameters:
+        filters:
+          includeClusterResources:
+            - group: ""
+              version: ""
+              resource: clusterissuers
+              ## change this value is you are using a custom cluster issuer
+              ## find the cluster issuer that you are using with the following command:
+              ## oc get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml | yq '.spec.certificateIssuer.name'
+              ## or set it to "" to backup all the cluster issuer
+              name: mycustomissuers
+              matchExpressions: []
+          excludeClusterResources: []
+          includeResources:
+            - group: ""
+              version: ""
+              resource: secrets
+              name: ""
+              matchExpressions: []
+            - group: ""
+              version: ""
+              resource: issuers
+              name: ""
+              matchExpressions: []
+            - group: ""
+              version: ""
+              resource: certificates
+              name: ""
+              matchExpressions: []
+          excludeResources: []
+  retention: null
+  selector:
+    matchExpressions:
+      - key: k10.kasten.io/appNamespace
+        operator: In
+        values:
+          ## change the name of custom cert manager namespace 
+          - cert-manager
+  subFrequency: null
