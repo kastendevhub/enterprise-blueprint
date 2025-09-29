@@ -33,6 +33,14 @@ apply it in the policy of the namespace db2u where you only backup the pvc.
 
 The `preBackupHook` and `postBackupHook` must be applied before and after the policy execute.
 
+## Restoring db2 
+
+From the [documentation](https://www.ibm.com/docs/en/db2/11.5.x?topic=restoring-snapshot-restores)  we should put the database in maintenance mode, and restore the PVC. 
+
+But if we follow the [detailed procedure](https://www.ibm.com/docs/en/db2/11.5.x?topic=restores-using-container-commands-db2ucluster), actually this is exactly what kasten do when you restore.
+
+Depending of your specific configuration. We should just backup and restore this namespace with the blueprint for the backup.
+
 # Backing up the components in the `mas-$MAS_INSTANCE_ID-manage` namespace
 
 The [documentation](https://www.ibm.com/docs/en/masv-and-l/cd?topic=manage-namespace) leads to backing up the `mas-$MAS_INSTANCE_ID-manage` namespace with a [script](https://www.ibm.com/docs/en/masv-and-l/cd?topic=namespace-backing-up-maximo-manage-script) that can be found in [github](https://github.com/ibm-mas/cli/blob/master/image/cli/mascli/backup-restore/manage-backup-restore.sh)  
