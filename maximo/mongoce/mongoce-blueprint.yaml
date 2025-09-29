@@ -9,6 +9,28 @@ metadata:
 actions:
   preBackupHook:    
     phases:
+    - func: KubeTask
+      name: backupDiscovery
+      args:
+        image: michaelcourcy/kasten-tools:8.0.8
+        command:
+        - sh
+        - -c
+        - |
+          NAMESPACE={{ .Namespace.Name }}
+
+          echo "discovering the key inside mas-mongo-ce-ca-certificate and mas-mongo-ce-server-certificate-key"
+          ca_key=$(kubectl get secret mas-mongo-ce-ca-certificate -n $NAMESPACE -o jsonpath='{.data}' | jq -r 'keys[0]')
+          server_key=$(kubectl get secret mas-mongo-ce-server-certificate-key -n $NAMESPACE -o jsonpath='{.data}' | jq -r 'keys[0]')
+          kando output ca_key=$ca_key
+          kando output server_key=$server_key
+
+          echo "Discovering the image used in the statefulset"
+          image=$(kubectl get statefulset mas-mongo-ce -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[?(@.name=="mongod")].image}')
+          kando output image=$image
+
+          # we need to find a way to discover the MAS_INSTANCE_ID
+          kando output mas_instance_id=dev
     - func: KubeOps
       name: createMongoBackupPod
       args:
@@ -39,7 +61,7 @@ actions:
                 type: "RuntimeDefault"
             containers:
             - name: mongoce-backup
-              image: mongo:6.0
+              image: {{ .Phases.backupDiscovery.Output.image }}
               command: ["/bin/bash", "-c", "while true; do sleep 30; done"]
               securityContext:
                 allowPrivilegeEscalation: false
@@ -66,19 +88,17 @@ actions:
               secret:
                 secretName: mas-mongo-ce-ca-certificate
                 items:
-                  - key: ca.crt
+                  - key: {{ .Phases.backupDiscovery.Output.ca_key }}
                     path: ca.crt
             - name: tls-secret
               secret:
                 secretName: mas-mongo-ce-server-certificate-key
                 items:
-                  - key: mongo.pem
+                  - key: {{ .Phases.backupDiscovery.Output.server_key }}
                     path: mongo.pem
             - name: backup-storage
               persistentVolumeClaim:
-                claimName: mongoce-backup-pvc
-            imagePullSecrets:
-              - name: my-dockerhub-secret
+                claimName: mongoce-backup-pvc            
             restartPolicy: Never
     - func: WaitV2
       name: waitForMongoceBackupPodReady
@@ -108,7 +128,7 @@ actions:
           - -c
           - |
             # TODO this may be autodiscovered ? 
-            MAS_INSTANCE_ID="dev"
+            MAS_INSTANCE_ID="{{ .Phases.backupDiscovery.Output.mas_instance_id }}"
             echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_core"
             mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
             echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_core"
@@ -137,3 +157,40 @@ actions:
           resource: "persistentvolumeclaims"
           name: "mongoce-backup-pvc"
           namespace: "{{ .Namespace.Name }}"
+  postRestoreHook:    
+    phases:
+    - func: KubeTask
+      name: restoreDiscovery
+      args:
+        image: michaelcourcy/kasten-tools:8.0.8
+        command:
+        - sh
+        - -c
+        - |
+          NAMESPACE={{ .Namespace.Name }}          
+
+          # we need to find a way to discover the MAS_INSTANCE_ID
+          kando output mas_instance_id=dev
+    # we don't need to recreate pvc or po because they were recreated by kasten, the pvc contains the dump
+    - func: KubeExec
+      name: restoreDumps
+      args:
+        namespace: "{{ .Namespace.Name }}"
+        pod: mongoce-backup
+        container: mongoce-backup
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            # TODO this may be autodiscovered ? 
+            MAS_INSTANCE_ID="{{ .Phases.restoreDiscovery.Output.mas_instance_id }}"
+            echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_core"
+            mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
+            echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_core"
+            echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_catalog"
+            mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_catalog.archive -d mas_${MAS_INSTANCE_ID}_catalog
+            echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_catalog"
