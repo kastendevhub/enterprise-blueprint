@@ -20,8 +20,8 @@ function backupSingleResource {
     echo "Backing up $RESOURCE_KIND/$RESOURCE_NAME in the $RESOURCE_NAMESPACE namespace..."
     echo "Saving $RESOURCE_KIND/$RESOURCE_NAME to $BACKUP_FOLDER/$RESOURCE_KIND-$RESOURCE_NAME.yaml"
     # change
-    # oc get $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE -o yaml | yq 'del(.metadata.creationTimestamp, .metadata.ownerReferences, .metadata.generation,  .metadata.resourceVersion, .metadata.uid, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"], .status)' >  $BACKUP_FOLDER/$RESOURCE_KIND-$RESOURCE_NAME.yaml
-    oc label $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE kasten-backup=true --overwrite
+    # kubectl get $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE -o yaml | yq 'del(.metadata.creationTimestamp, .metadata.ownerReferences, .metadata.generation,  .metadata.resourceVersion, .metadata.uid, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"], .status)' >  $BACKUP_FOLDER/$RESOURCE_KIND-$RESOURCE_NAME.yaml
+    kubectl label $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE kasten-backup=true --overwrite
 }
 
 function backupResources {
@@ -29,13 +29,13 @@ function backupResources {
 
     echo "Backing up all $RESOURCES resources in the $MAS_CORE_NAMESPACE namespace..."
     # change
-    oc label $RESOURCES -n $MAS_CORE_NAMESPACE kasten-backup=true --overwrite
+    kubectl label $RESOURCES -n $MAS_CORE_NAMESPACE kasten-backup=true --overwrite --all
     
-    numberOfItems=`(oc get $RESOURCES -n $MAS_CORE_NAMESPACE -o yaml | yq '.items | length')`
+    numberOfItems=`(kubectl get $RESOURCES -n $MAS_CORE_NAMESPACE -o yaml | yq '.items | length')`
     
     for (( i = 0; i < $numberOfItems; i++ ))
     do
-        resourceYaml=`(oc get $RESOURCES  -n $MAS_CORE_NAMESPACE -o yaml | yq .items[$i])`
+        resourceYaml=`(kubectl get $RESOURCES  -n $MAS_CORE_NAMESPACE -o yaml | yq .items[$i])`
         resourceKind=`(echo "$resourceYaml" | yq .kind)`
         resourceName=`(echo "$resourceYaml" | yq .metadata.name)`
         hasCredentials=`(echo "$resourceYaml" | yq '.spec.config.credentials | has("secretName")')`
@@ -54,7 +54,7 @@ function checkForManualCertMgmt {
 
     echo "Determining if Manual Certificate Management is enabled..."
     
-    suiteYaml=`(oc get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml)`
+    suiteYaml=`(kubectl get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml)`
     hasCertMgmt=`(echo "$suiteYaml" |  yq '.spec.settings | has("manualCertMgmt")')`
     if [ "$hasCertMgmt" == "true" ]; then
         hasCertMgmtValue=`(echo "$suiteYaml" | yq .spec.settings.manualCertMgmt)`
@@ -70,7 +70,7 @@ function checkForCustomIssuer {
 
     echo "Determining if a custom ClusterIssuer is being used..."
     
-    suiteYaml=`(oc get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml)`
+    suiteYaml=`(kubectl get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml)`
     hasCustomIssuer=`(echo "$suiteYaml" |  yq '.spec | has("certificateIssuer")')`
     
     if [ "$hasCustomIssuer" == "true" ]; then
@@ -151,11 +151,11 @@ MAS_CORE_NAMESPACE=mas-$MAS_INSTANCE_ID-core
 
 # 2. Pre-req checks
 # -----------------------------------------------------------------------------
-command -v oc >/dev/null 2>&1 || { echo >&2 "Required executable \"oc\" not found on PATH.  Aborting."; exit 1; }
+command -v kubectl >/dev/null 2>&1 || { echo >&2 "Required executable \"kubectl\" not found on PATH.  Aborting."; exit 1; }
 command -v yq >/dev/null 2>&1 || { echo >&2 "Required executable \"yq\" not found on PATH.  Aborting."; exit 1; }
 
 
-oc whoami &> /dev/null
+kubectl whoami &> /dev/null
 if [[ "$?" == "1" ]]; then
   echo "You must be logged in to your OpenShift cluster to proceed (oc login)"
   exit 1
@@ -190,10 +190,10 @@ if [ "$MODE" == "backup" ]; then
 elif [ "$MODE" == "restore" ]; then
      echo "Starting MAS Core restore of theinstance id $MAS_INSTANCE_ID from $BACKUP_FOLDER"
     if [ -d "$BACKUP_FOLDER" ]; then
-        oc new-project $MAS_CORE_NAMESPACE
+        kubectl new-project $MAS_CORE_NAMESPACE
         for yamlFile in $BACKUP_FOLDER/*.yaml; do
             echo "Applying recouce from $yamlFile"
-            oc apply -f $yamlFile
+            kubectl apply -f $yamlFile
         done
     else 
         echo "MAS Core restore cannot complete. The folder $BACKUP_FOLDER does not exist."
