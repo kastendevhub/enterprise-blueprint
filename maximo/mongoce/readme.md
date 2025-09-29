@@ -51,8 +51,12 @@ The `preBackupHook` and `postBackupHook` must be applied before and after the po
 
 # Restoring 
 
-For restoring we need to restore the mongoce-backup pod and the mongoce-backup-pvc in the namespace mongoce : 
+For restoring we need to restore the mongoce-backup pod and the mongoce-backup-pvc in the namespace mongoce and trigger a mongorestore: 
 
+Configure the post restore hook 
+![PostRestoreHook action](./postRestoreHook.png)
+
+Then only restore the pvc and the pod 
 ![Restore the mongoce-backup pvc and pod](./restore-mongoce-pvc-pod.png)
 
 Once the restore is finished exec the pod and execute the restore actions 

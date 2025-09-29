@@ -75,7 +75,7 @@ kubectl create secret docker-registry my-dockerhub-secret \
 
 Apply the statefulset 
 ```
-oc apply -f mongo-statefulset.yaml
+oc apply -f mongoce-statefulset.yaml
 ```
 
 
@@ -102,7 +102,7 @@ rs.initiate({
 })
 ```
 
-Wait for the replica set to be ready, then add the other members and check status:
+Wait for the replica set to be ready and check status:
 
 ```
 rs.status()
