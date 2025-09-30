@@ -31,7 +31,10 @@ actions:
           kando output image $image
 
           # we need to find a way to discover the MAS_INSTANCE_ID
-          kando output mas_instance_id dev
+          # always make sure you created the configmap mas-instance-id in the mongoce namespace
+          # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
+          mas_instance_id=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
+          kando output mas_instance_id $mas_instance_id
     - func: KubeOps
       name: createMongoBackupPod
       args:
@@ -60,6 +63,12 @@ actions:
               runAsNonRoot: true 
               seccompProfile: 
                 type: "RuntimeDefault"
+            securityContext:
+              capabilities:
+                drop:
+                  - MKNOD
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
             containers:
             - name: mongoce-backup
               image: {{ .Phases.backupDiscovery.Output.image }}
@@ -183,8 +192,10 @@ actions:
           kando output image $image
 
           # we need to find a way to discover the MAS_INSTANCE_ID
-          sleep 30
-          kando output mas_instance_id dev
+          # always make sure you created the configmap mas-instance-id in the mongoce namespace
+          # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
+          mas_instance_id=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
+          kando output mas_instance_id $mas_instance_id
     # we don't need to recreate pvc as it is restored by kasten, the pod need to be recreated with the key that may have changed on another cluster or another time
     - func: KubeOps
       name: createMongoRestorePod
@@ -203,6 +214,12 @@ actions:
               runAsNonRoot: true 
               seccompProfile: 
                 type: "RuntimeDefault"
+            securityContext:
+              capabilities:
+                drop:
+                  - MKNOD
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
             containers:
             - name: mongoce-backup
               image: {{ .Phases.restoreDiscovery.Output.image }}

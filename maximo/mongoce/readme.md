@@ -44,7 +44,8 @@ oc exec -n mongoce -it mongoce-backup -- bash
 
 # in the pod create the dump of mas_{MAS_INSTANCE_ID}_core and mas_{MAS_INSTANCE_ID}_catalog
 
-MAS_INSTANCE_ID="dev"
+#adapt to your situation
+MAS_INSTANCE_ID="masdev"
 
 mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
 
@@ -59,6 +60,15 @@ oc delete -f mongoce-backup.yaml
 ``` 
 
 ## Deploy the blueprint 
+
+
+we need to find a way to discover the MAS_INSTANCE_ID, always make sure you created the configmap mas-instance-id in the mongoce namespace
+
+```
+oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
+```
+
+Then deploy the blueprint
 
 ```
 oc create -f mongoce-blueprint.yaml 
