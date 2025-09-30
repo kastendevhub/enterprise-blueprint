@@ -10,6 +10,25 @@ We follow the IBM documentation for [backing up](https://www.ibm.com/docs/en/mas
 
 If you need to repro an environment close to the mongoce [we provide a guide](./repro-mongoce.md) that let you build a mongo instance with a very similar configuration.
 
+## If you pull from a private registry or docker hub
+
+Create a pull secret to pull the mongo:6.0 image.
+```
+kubectl create secret docker-registry my-dockerhub-secret \
+  --docker-username=<your-username> \
+  --docker-password=<your-password> \
+  --docker-email=<your-email> \
+  -n mongoce
+```
+
+Now link this pull secret to the default service account  
+```
+oc secrets link default my-dockerhub-secret --for=pull -n mongoce
+```
+
+If you need to add docker pull secret to the global openshift check the [documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.14/html/images/managing-images#images-update-global-pull-secret_using-image-pull-secrets).
+
+
 ## Test your blueprint before deploying it
 
 We will create a mongoce-backup pod which is a mongo client that will store the dump in it's own pvc before we backup the mongoce namespace.
@@ -56,8 +75,8 @@ For restoring we need to restore the mongoce-backup pod and the mongoce-backup-p
 Configure the post restore hook 
 ![PostRestoreHook action](./postRestoreHook.png)
 
-Then only restore the pvc and the pod 
-![Restore the mongoce-backup pvc and pod](./restore-mongoce-pvc-pod.png)
+Then only restore the pvc by deselecting all artifacts but the PVC.
+![Restore the mongoce-backup pvc and pod](./deselectAllArtifactsButBackupPVC.png)
 
 Once the restore is finished exec the pod and execute the restore actions 
 

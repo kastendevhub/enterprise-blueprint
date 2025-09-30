@@ -64,7 +64,7 @@ oc create secret generic mongo-keyfile --from-file=mongo-keyfile=mongo-keyfile -
 3. **Deploy MongoDB StatefulSet**
 
 
-Create a Docker Hub account (free) and create a pull secret to pull the mongo:6.0 image.
+Create a pull secret to pull the mongo:6.0 image.
 ```
 kubectl create secret docker-registry my-dockerhub-secret \
   --docker-username=<your-username> \
@@ -72,6 +72,14 @@ kubectl create secret docker-registry my-dockerhub-secret \
   --docker-email=<your-email> \
   -n mongoce
 ```
+
+Now link this pull secret to the default service account 
+```
+oc secrets link default my-dockerhub-secret --for=pull -n mongoce
+```
+
+If you need to add docker pull secret to the global openshift check the [documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.14/html/images/managing-images#images-update-global-pull-secret_using-image-pull-secrets).
+
 
 Apply the statefulset 
 ```

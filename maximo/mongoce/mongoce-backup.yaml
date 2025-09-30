@@ -56,6 +56,3 @@ spec:
     persistentVolumeClaim:
       claimName: mongoce-backup-pvc
   restartPolicy: Never
-  # if docker refuse you download this image
-  #imagePullSecrets:
-  #  - name: my-dockerhub-secret
