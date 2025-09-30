@@ -315,3 +315,25 @@ actions:
           resource: "persistentvolumeclaims"
           name: "mongoce-backup-pvc"
           namespace: "{{ .Namespace.Name }}"
+  postRestoreHookError:
+    phases:
+    - func: KubeOps
+      name: deleteMongoBackupPodAfterRestoreError
+      args:
+        operation: delete
+        objectReference:
+          apiVersion: v1
+          group: ""
+          resource: "pods"
+          name: "mongoce-backup"
+          namespace: "{{ .Namespace.Name }}"
+    - func: KubeOps
+      name: deleteMongoBackupPVCAfterRestoreError
+      args:
+        operation: delete
+        objectReference:
+          apiVersion: v1
+          group: ""
+          resource: "persistentvolumeclaims"
+          name: "mongoce-backup-pvc"
+          namespace: "{{ .Namespace.Name }}"
