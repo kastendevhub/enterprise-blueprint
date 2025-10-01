@@ -45,7 +45,7 @@ Unfortunately there is no ETA yet and this feature may even not be relevant when
 
 However this can be a mid term remediation depending of the progress IBM do on this matter.
 
-## What Kasten brings ? 
+## Then what Kasten brings ? 
 
 Kasten bring several advantages in this integration 
 - **No system setting**, you don't have to configure a specific machine to manage all the cpd commands line installation, all is provided in a single container image maintained and executed by Kasten
