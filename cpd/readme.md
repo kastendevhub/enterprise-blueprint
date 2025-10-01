@@ -19,13 +19,14 @@ IBM currently offers 6 Cloud Pak’s and each of these Cloud Pak’s has their o
 
 The blueprint and the guide that comes along is focussed on [CPD](https://www.ibm.com/docs/en/cloud-paks/cp-data/5.1.x?topic=installing-administering-cloud-pak-data) (Cloud Pak for Data)
 
-# limitations
+# limitations and important considerations
 
 This is the first version of this blueprint and it has this limitations :
    - We support only Online backup not Offline 
-   - We support only component that does not require specfic backup procedure (most of them does not require specific procedures)
+   - We support only component that does not require specfic backup procedure (most of them does not require specific procedures, for instance datastage or watson studio are covered)
    - We support only restore on the same cluster not on another cluster
-   - We don't use the Kasten datamover but leverage the OADP datamover (more on this later)
+   - We don't use the Kasten datamover but leverage the OADP datamover whih has a very important conscequence : 
+   - **In case of disaster, if you loose the snapshot created by OADP, you won't be able to recover !**
 
 ## Why are we not using the kasten datamover ?
 
@@ -35,6 +36,14 @@ IBM is working on [defining interfaces that will let third party backup tool wor
 but this is a long process and as soon as those interfaces will be defined we will adapt the blueprint so that OADP could be removed. 
 
 Kasten will call the cpd-cli that will call on its turn CPDBR following this flow : `Kasten → cpd-cli → CPDBR → Service Orchestration → OADP → Storage Provider`
+
+## Mid term remediation 
+
+Today Kasten know how protect the snapshot that he created but protecting snapshot created by a third party (like OADP) is a new feature that we are scoping.
+
+Unfortunately there is no ETA yet and this feature may even not be relevant when IBM will provide the interfaces for third party backup tool to work with CPD.
+
+However this can be a mid term remediation depending of the progress IBM do on this matter.
 
 ## What Kasten brings ? 
 
