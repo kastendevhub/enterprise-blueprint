@@ -42,8 +42,11 @@ But with kasten a simpler approach can be taken :
 oc delete -f db2instance.yaml 
 ```
 It will remove all artifacts created by the operator (pvc included)
+
 2. with kasten we restore all the pvc + all the secrets 
+
 3. with kasten we restore the db2uinstances and wait for all the pods to be ready 
+
 ```
 NAME                                                READY   STATUS      RESTARTS   AGE
 c-db2-example-db2u-0                                1/1     Running     0          26m
