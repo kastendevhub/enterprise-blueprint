@@ -15,7 +15,6 @@ In order to validate the blueprint execute the following command
 ```
 oc exec -n db2u -it c-mas-masdev-masdev-manage-db2u-0 -- /bin/sh
 manage_snapshots --action suspend
-# do we have a way to not confirm the authenticity of the host manage_snapshots --help ?
 # confirm HA monitoring is disabled 
 wvcli system status
 
@@ -35,11 +34,30 @@ The `preBackupHook` and `postBackupHook` must be applied before and after the po
 
 ## Restoring db2 
 
-From the [documentation](https://www.ibm.com/docs/en/db2/11.5.x?topic=restoring-snapshot-restores)  we should put the database in maintenance mode, and restore the PVC. 
+We should follow this steps :[Using container commands - Db2uInstance](https://www.ibm.com/docs/en/db2/11.5.x?topic=restores-using-container-commands-db2uinstance) to restore from a previous backup.
 
-But if we follow the [detailed procedure](https://www.ibm.com/docs/en/db2/11.5.x?topic=restores-using-container-commands-db2ucluster), actually this is exactly what kasten do when you restore.
+But with kasten a simpler approach can be taken : 
+1. delete the db2instance :
+```
+oc delete -f db2instance.yaml 
+```
+It will remove all artifacts created by the operator (pvc included)
+2. with kasten we restore all the pvc + all the secrets 
+3. with kasten we restore the db2uinstances and wait for all the pods to be ready 
+```
+NAME                                                READY   STATUS      RESTARTS   AGE
+c-db2-example-db2u-0                                1/1     Running     0          26m
+c-db2-example-etcd-0                                1/1     Running     0          27m
+c-db2-example-restore-morph-2qpvf                   0/1     Completed   0          25m
+db2u-day2-ops-controller-manager-5bdcbfd869-vtl6w   1/1     Running     0          5h21m
+db2u-operator-manager-fdc864bd7-9nv59               1/1     Running     0          7h20m
+```
+4. Because we did a backup when all write operations were suspended we need to resume the write 
+```
+oc exec -it c-mas-masdev-masdev-manage-db2u-0 -n db2u -- bash
+manage_snapshots --action resume
+```
 
-Depending of your specific configuration. We should just backup and restore this namespace with the blueprint for the backup.
 
 # Backing up the components in the `mas-$MAS_INSTANCE_ID-manage` namespace
 
