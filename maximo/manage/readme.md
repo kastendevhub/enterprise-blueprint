@@ -55,6 +55,7 @@ c-db2-example-restore-morph-2qpvf                   0/1     Completed   0       
 db2u-day2-ops-controller-manager-5bdcbfd869-vtl6w   1/1     Running     0          5h21m
 db2u-operator-manager-fdc864bd7-9nv59               1/1     Running     0          7h20m
 ```
+
 4. Because we did a backup when all write operations were suspended we need to resume the write 
 ```
 oc exec -it c-mas-masdev-masdev-manage-db2u-0 -n db2u -- bash
