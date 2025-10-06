@@ -11,3 +11,11 @@ spec:
       json:
         - op: remove
           path: /metadata/annotations
+    - subject:
+        resource: db2uclusters
+      name: remove-db2ucluster-annotations
+      json:
+        - op: remove
+          path: /metadata/annotations
+        - op: remove
+          path: /spec/environment/database/ssl
