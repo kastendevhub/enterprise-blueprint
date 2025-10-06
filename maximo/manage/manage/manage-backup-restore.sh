@@ -5,6 +5,8 @@
 # https://github.com/ibm-mas/cli/blob/master/image/cli/mascli/backup-restore/manage-backup-restore.sh
 # instead of taking the manifest of the resource in a folder we add the label kasten-backup=true to the resources
 # we want to back up and restore with K10.
+#
+# Note: the help section need to be updated by IBM because it's a copy of mas-backup-restore.sh which does not take in account the MAS_WORKSPACE_ID
 # -----------------------------------------------------------
 
 
@@ -155,6 +157,7 @@ if [ "$MODE" == "backup" ]; then
     backupSingleResource Secret $MAS_WORKSPACE_ID-manage-encryptionsecret-operator $MAS_MANAGE_NAMESPACE
     backupSingleResource ManageApp $MAS_INSTANCE_ID $MAS_MANAGE_NAMESPACE
     backupResources ManageWorkspace $MAS_MANAGE_NAMESPACE
+    # this seems useless as it's already covered by mas-backup-restore.sh
     backupResources jdbccfgs $MAS_CORE_NAMESPACE 
     checkForManualCertMgmt
 elif [ "$MODE" == "restore" ]; then

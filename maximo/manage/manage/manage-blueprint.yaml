@@ -1,0 +1,119 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata:
+  name: manage-blueprint
+  namespace: kasten-io
+  annotations:
+    category: Manifest 
+    description: Label all the manifests that need to be backup and restore for Maximo Manage namespace
+actions:
+  preBackupHook:    
+    phases:
+    - func: KubeTask
+      name: labelManifests
+      args:
+        # https://github.com/michaelcourcy/kasten-tools
+        image: michaelcourcy/kasten-tools:8.0.8
+        command:
+        - bash
+        - -o
+        - errexit
+        - -o
+        - pipefail
+        - -c
+        - |
+          NAMESPACE={{ .Namespace.Name }}
+  
+          
+          # we need to find a way to discover the MAS_INSTANCE_ID
+          # always make sure you created the configmap mas-instance-id in the mas-<MAS_INSTANCE_ID>-manage namespace
+          # MAS_INSTANCE_ID=<My mas instance id>
+          # MAS_WOKSPACE_ID=<My workspace id>
+          # oc create configmap mas-instance-id \
+          #  -n mas-$MAS_INSTANCE_ID-manage  \
+          #  --from-literal mas-instance-id=$MAS_INSTANCE_ID \
+          #  --from-literal mas-workspace-id=$MAS_WORKSPACE_ID
+          
+          MAS_INSTANCE_ID=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
+          MAS_WORKSPACE_ID=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-workspace-id}')
+
+          : ${MAS_INSTANCE_ID?"MAS_INSTANCE_ID not defined"}
+          : ${MAS_WORKSPACE_ID?"MAS_WORKSPACE_ID not defined"}
+          
+          MAS_MANAGE_NAMESPACE=$NAMESPACE # MAS_MANAGE_NAMESPACE=mas-$MAS_INSTANCE_ID-manage
+          MAS_CORE_NAMESPACE=mas-$MAS_INSTANCE_ID-core
+
+          function backupSingleResource {
+              RESOURCE_KIND=$1
+              RESOURCE_NAME=$2
+              NAMESPACE=$3
+              
+              echo "Labeling $RESOURCE_KIND/$RESOURCE_NAME"
+              kubectl label $RESOURCE_KIND  $RESOURCE_NAME -n $NAMESPACE kasten-backup=true --overwrite
+          }
+
+          function backupResources {
+            RESOURCES=$1
+            NAMESPACE=$2
+
+            echo "Labeling all $RESOURCES resources in the $NAMESPACE namespace..."
+            kubectl label $RESOURCES -n $NAMESPACE kasten-backup=true --overwrite --all
+            numberOfItems=`(kubectl get $RESOURCES -n $NAMESPACE -o yaml | yq '.items | length')`
+            
+            for (( i = 0; i < $numberOfItems; i++ ))
+            do
+                resourceYaml=`(kubectl get $RESOURCES  -n $NAMESPACE -o yaml | yq .items[$i])`
+                resourceKind=`(echo "$resourceYaml" | yq .kind)`
+                resourceName=`(echo "$resourceYaml" | yq .metadata.name)`
+                specYaml=`(echo "$resourceYaml" | yq .spec)`
+            
+                secretList=`(echo "$specYaml" | yq '[.. | select(has("secretName"))]')`
+                echo "secretList are $secretList"
+                numberOfSecrets=`(echo "$secretList" | yq 'length')`
+                for (( j = 0; j < $numberOfSecrets; j++ ))
+                do
+                    secretName=`(echo "$secretList" | yq .[$j].secretName)`
+                    echo "secret $secret"
+                    backupSingleResource Secret $secretName $NAMESPACE
+                done
+            done
+          }
+
+          function checkForManualCertMgmt {
+
+              echo "Determining if Manual Certificate Management is enabled..."
+              
+              suiteYaml=`(kubectl get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml)`
+              hasCertMgmt=`(echo "$suiteYaml" |  yq '.spec.settings | has("manualCertMgmt")')`
+              
+              if [ "$hasCertMgmt" == "true" ]; then
+                  hasCertMgmtValue=`(echo "$suiteYaml" | yq .spec.settings.manualCertMgmt)`
+                  if [ "$hasCertMgmtValue" == "true" ]; then
+                      backupSingleResource Secret $MAS_INSTANCE_ID-$MAS_WORKSPACE_ID-cert-public-81 $MAS_MANAGE_NAMESPACE
+                  fi
+              fi
+
+          }
+
+          echo "Starting labeling resource in manage namespace using the instance id $MAS_INSTANCE_ID and workspace id $MAS_WORKSPACE_ID"
+          
+          backupSingleResource Subscription ibm-mas-manage $MAS_MANAGE_NAMESPACE
+          # backupSingleResource OperatorGroup ibm-manage-operatorgroup $MAS_MANAGE_NAMESPACE
+          OPERATOR_GROUP=$(kubectl get operatorgroup -n mas-$MAS_INSTANCE_ID-manage -o name)
+          OPERATOR_GROUP_NEW=$(echo "$OPERATOR_GROUP" | sed -E 's/.*\/(.+)/\1/')
+          backupSingleResource OperatorGroup $OPERATOR_GROUP_NEW $MAS_MANAGE_NAMESPACE
+          backupSingleResource Secret ibm-entitlement $MAS_MANAGE_NAMESPACE
+          backupSingleResource Secret $MAS_WORKSPACE_ID-manage-encryptionsecret $MAS_MANAGE_NAMESPACE
+          backupSingleResource Secret $MAS_WORKSPACE_ID-manage-encryptionsecret-operator $MAS_MANAGE_NAMESPACE
+          backupSingleResource ManageApp $MAS_INSTANCE_ID $MAS_MANAGE_NAMESPACE
+          backupResources ManageWorkspace $MAS_MANAGE_NAMESPACE
+          # this seems useless as it's already covered by mas-backup-restore.sh but it doesn't hurt
+          backupResources jdbccfgs $MAS_CORE_NAMESPACE 
+          checkForManualCertMgmt
+          
+
+
+
+
+          
+    

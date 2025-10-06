@@ -26,9 +26,11 @@ actions:
   
           
           # we need to find a way to discover the MAS_INSTANCE_ID
-          # always make sure you created the configmap mas-instance-id in the mongoce namespace
+          # always make sure you created the configmap mas-instance-id in the mascore namespace
           # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
           MAS_INSTANCE_ID=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
+          : ${MAS_INSTANCE_ID?"MAS_INSTANCE_ID not defined"}
+
           MAS_CORE_NAMESPACE=$NAMESPACE # MAS_CORE_NAMESPACE=mas-$MAS_INSTANCE_ID-core
 
           function backupSingleResource {
