@@ -47,7 +47,7 @@ Only the The `preBackupHook` need to be configured in the policy.
 
 Find the kasten restore point that contains the component you want to restore using the overwrite option.
 
-[Overwrite](./overwrite.png)
+![Overwrite](./overwrite.png)
 
 Follow the [IBM documentation to validate](https://www.ibm.com/docs/en/masv-and-l/cd?topic=manage-validating-restoration-maximo) the restoration.
 
