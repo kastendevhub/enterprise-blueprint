@@ -84,7 +84,7 @@ While this process work a simpler approach can be taken :
 
 1. review and create the transformset 
 ```
-oc create -f db2ucluster-transformset.yaml 
+oc create -f remove-db2ucluster-annotation-transformset.yaml 
 ```
 
 2. delete the db2cluster :
