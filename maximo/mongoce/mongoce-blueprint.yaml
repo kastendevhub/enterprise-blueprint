@@ -7,6 +7,7 @@ metadata:
     category: database
     description: Blueprint to backup and restore MongoDB used by Maximo Application Suite
 actions:
+  
   preBackupHook:    
     phases:
     - func: KubeTask
@@ -145,6 +146,7 @@ actions:
             echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_catalog"
             mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_catalog.archive -d mas_${MAS_INSTANCE_ID}_catalog
             echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_catalog"
+  
   postBackupHook:
     phases:
     - func: KubeOps
@@ -315,6 +317,7 @@ actions:
           resource: "persistentvolumeclaims"
           name: "mongoce-backup-pvc"
           namespace: "{{ .Namespace.Name }}"
+  
   postRestoreHookError:
     phases:
     - func: KubeOps
