@@ -77,7 +77,7 @@ oc create -f mongoce-blueprint.yaml
 
 The `preBackupHook` and `postBackupHook` must be applied before and after the policy execute.
 
-The `postRestoreHookError` must be applied after the policy execute if there is an error during policy backup.
+The `postBackupHook` must be applied after the policy execute if there is an error during policy backup.
 
 ![Setting up pre and post backup hook](./pre-post-snapshot-actions-hook.png)
 
