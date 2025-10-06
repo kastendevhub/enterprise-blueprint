@@ -89,7 +89,7 @@ TODO update the image to include the error hook
 
 For restoring we need to restore the mongoce-backup-pvc and recreate the mongoce-backup pod in the namespace mongoce. Once the pod is ready we trigger a mongorestore in a post restore hook: 
 
-Configure the post restore hook 
+Configure the post restore hook including the post restore hook error.
 ![PostRestoreHook action](./postRestoreHook.png)
 
 Then only restore the pvc by deselecting all artifacts but the PVC.
