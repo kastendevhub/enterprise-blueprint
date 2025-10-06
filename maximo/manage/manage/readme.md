@@ -18,7 +18,7 @@ manage-backup-restore.sh -i <MAS_INSTANCE_ID> -w <MAS_WORKSPACE_ID>  -f ./ -m ba
 
 Now, We only have to create a policy of the `mas-$MAS_INSTANCE_ID-manage` namespace that include only resources that have the label `kasten-backup:true`.
 
-TODO Image 
+![Label filter](./label-filter.png)
 
 ## Allow discovery of the `MAS_INSTANCE_ID`and `MAS_WORKSPACE_ID` in the namespace `mas-$MAS_INSTANCE_ID-manage` 
 

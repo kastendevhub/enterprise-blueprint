@@ -1,6 +1,6 @@
 # Goal 
 
-- A blueprint to label all the components that need to be backed up in the namespace `mas-$MAS_INSTANCE_ID-core`
+A blueprint to label all the components that need to be backed up in the namespace `mas-$MAS_INSTANCE_ID-core`
 
 # How it works 
 
@@ -11,12 +11,14 @@ We follow the documentation for [backing up](https://www.ibm.com/docs/en/masv-an
 We change the script : instead of creating the resource manisfest yaml files in your machine we just label the resources with `kasten-backup=true`.
 
 ```
-cd maximo/suitecore
+cd maximo/mascore
 # replace <MAS_INSTANCE_ID> with your instance id eg. masdev
 ./mascore-backup-restore.sh -i <MAS_INSTANCE_ID> -f ./ -m backup
 ```
 
 Now, we only have to create a policy for the `mas-$MAS_INSTANCE_ID-core` namespace that include only resource that have the label `kasten-backup:true`.
+
+![Label filter](./label-filter.png)
 
 ## If you have a custom cert manager
 
