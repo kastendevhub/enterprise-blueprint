@@ -88,5 +88,5 @@ For restoring we need to restore the mongoce-backup-pvc and recreate the mongoce
 Configure the post restore hook including the post restore hook error.
 ![PostRestoreHook action](./postRestoreHook.png)
 
-Then only restore the pvc by deselecting all artifacts but the PVC.
+Then only restore the pvc by deselecting all artifacts but the backup PVC.
 ![Restore the mongoce-backup pvc and pod](./deselectAllArtifactsButBackupPVC.png)
