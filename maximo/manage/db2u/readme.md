@@ -135,4 +135,8 @@ And deselect all artifacts except the instance password
 
 ![Only instance password](./only-instance-password.png)
 
-The delete the `c-<db2ucluter name>--db2u-0` pod, it will restart with the appropriate secret.
+Then delete the `c-<db2ucluter name>--db2u-0` pod, it will restart with the appropriate secret.
+
+```
+oc delete po -n db2u c-<db2ucluter name>--db2u-0
+```
