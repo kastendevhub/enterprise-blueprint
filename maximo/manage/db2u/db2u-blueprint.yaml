@@ -1,0 +1,121 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata:
+  name: db2u-blueprint
+  namespace: kasten-io
+  annotations:
+    category: database
+    description: Blueprint to suspend and resume Maximo Application Suite Manage during snapshot
+actions:
+  preBackupHook:    
+    phases:
+    - func: KubeTask
+      name: preBackupDiscovery
+      args:
+        # https://github.com/michaelcourcy/kasten-tools
+        image: michaelcourcy/kasten-tools:8.0.8
+        command:
+        - sh
+        - -cx
+        - |
+          NAMESPACE={{ .Namespace.Name }}
+
+          # we need to find a way to discover the name of the db2ucluster
+          # always make sure you created the configmap db2ucluster-id in the db2u namespace
+          # oc create configmap -n db2u db2ucluster-id --from-literal db2ucluster-id=mas-masdev-masdev-manage
+          db2ucluster_name=$(kubectl get configmap -n $NAMESPACE db2ucluster-id -o jsonpath='{.data.db2ucluster-id}')
+          kando output db2ucluster_name $db2ucluster_name
+    - func: KubeExec
+      name: suspendDb2Writing
+      args:
+        namespace: "{{ .Namespace.Name }}"        
+        pod: c-{{ .Phases.preBackupDiscovery.Output.db2ucluster_name }}-db2u-0
+        container: db2u
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            manage_snapshots --action suspend
+  postBackupHook:    
+    phases:
+    - func: KubeTask
+      name: postBackupDiscovery
+      args:
+        # https://github.com/michaelcourcy/kasten-tools
+        image: michaelcourcy/kasten-tools:8.0.8
+        command:
+        - sh
+        - -cx
+        - |
+          NAMESPACE={{ .Namespace.Name }}
+
+          # we need to find a way to discover the name of the db2ucluster
+          # always make sure you created the configmap db2ucluster-id in the db2u namespace
+          # oc create configmap -n db2u db2ucluster-id --from-literal db2ucluster-id=mas-masdev-masdev-manage
+          db2ucluster_name=$(kubectl get configmap -n $NAMESPACE db2ucluster-id -o jsonpath='{.data.db2ucluster-id}')
+          kando output db2ucluster_name $db2ucluster_name
+    - func: KubeExec
+      name: resumeDb2Writing
+      args:
+        namespace: "{{ .Namespace.Name }}"        
+        pod: c-{{ .Phases.postBackupDiscovery.Output.db2ucluster_name }}-db2u-0
+        container: db2u
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            manage_snapshots --action resume
+  postRestoreHook:    
+    phases:
+    - func: KubeTask
+      name: postRestoreDiscovery
+      args:
+        # https://github.com/michaelcourcy/kasten-tools
+        image: michaelcourcy/kasten-tools:8.0.8
+        command:
+        - sh
+        - -cx
+        - |
+          NAMESPACE={{ .Namespace.Name }}
+
+          # we need to find a way to discover the name of the db2ucluster
+          # always make sure you created the configmap db2ucluster-id in the db2u namespace
+          # oc create configmap -n db2u db2ucluster-id --from-literal db2ucluster-id=mas-masdev-masdev-manage
+          db2ucluster_name=$(kubectl get configmap -n $NAMESPACE db2ucluster-id -o jsonpath='{.data.db2ucluster-id}')
+          kando output db2ucluster_name $db2ucluster_name
+    - func: WaitV2
+      name: waitForDb2uPodReady
+      args:
+        timeout: 10m
+        conditions:
+          anyOf:
+          - condition: '{{ $available := false }}{{ range $condition := $.status.conditions }}{{ if and (eq .type "Ready") (eq .status "True") }}{{ $available = true }}{{ end }}{{ end }}{{ $available }}'
+            objectReference:
+              apiVersion: "v1"
+              group: ""
+              name: "c-{{ .Phases.postRestoreDiscovery.Output.db2ucluster_name }}-db2u-0"
+              namespace: "{{ .Namespace.Name }}"
+              resource: "pods"
+    - func: KubeExec
+      name: resumeDb2WritingAfterRestore
+      args:
+        namespace: "{{ .Namespace.Name }}"        
+        pod: c-{{ .Phases.postRestoreDiscovery.Output.db2ucluster_name }}-db2u-0
+        container: db2u
+        command:
+          - bash
+          - -o
+          - errexit
+          - -o
+          - pipefail
+          - -c
+          - |
+            manage_snapshots --action resume

@@ -1,0 +1,13 @@
+kind: TransformSet
+apiVersion: config.kio.kasten.io/v1alpha1
+metadata:
+  name: remove-db2cluster-annotations
+  namespace: kasten-io
+spec:
+  transforms:
+    - subject:
+        resource: db2uclusters
+      name: remove-db2ucluster-annotations
+      json:
+        - op: remove
+          path: /metadata/annotations

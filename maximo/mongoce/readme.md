@@ -6,30 +6,11 @@ A blueprint to backup the mongoce database used by Maximo
 
 We follow the IBM documentation for [backing up](https://www.ibm.com/docs/en/masv-and-l/cd?topic=suite-mongodb-maximo-application) and [restoring](https://www.ibm.com/docs/en/masv-and-l/cd?topic=suite-restoring-mongodb-maximo-application) the mongodb database. 
 
-# Install and execute the blueprint 
+# Repro the nevironment
 
-If you need to repro an environment close to the mongoce [we provide a guide](./repro-mongoce.md) that let you build a mongo instance with a very similar configuration.
+If you need to repro an environment close to the mongoce [we provide a guide](./repro-mongoce.md) that let you build a mongo instance with a very similar configuration than the one you'll find in maximo.
 
-## If you pull from a private registry or docker hub
-
-Create a pull secret to pull the mongo:6.0 image.
-```
-kubectl create secret docker-registry my-dockerhub-secret \
-  --docker-username=<your-username> \
-  --docker-password=<your-password> \
-  --docker-email=<your-email> \
-  -n mongoce
-```
-
-Now link this pull secret to the default service account  
-```
-oc secrets link default my-dockerhub-secret --for=pull -n mongoce
-```
-
-If you need to add docker pull secret to the global openshift check the [documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.14/html/images/managing-images#images-update-global-pull-secret_using-image-pull-secrets).
-
-
-## Test your blueprint before deploying it
+## Preliminary test
 
 We will create a mongoce-backup pod which is a mongo client that will store the dump in it's own pvc before we backup the mongoce namespace.
 
@@ -59,6 +40,28 @@ Once you finished your tests delete the pod and its pvc
 oc delete -f mongoce-backup.yaml
 ``` 
 
+# Install and execute the blueprint 
+
+## If you pull from a private registry or docker hub
+
+Create a pull secret to pull the mongo:6.0 image.
+```
+kubectl create secret docker-registry my-dockerhub-secret \
+  --docker-username=<your-username> \
+  --docker-password=<your-password> \
+  --docker-email=<your-email> \
+  -n mongoce
+```
+
+Now link this pull secret to the default service account  
+```
+oc secrets link default my-dockerhub-secret --for=pull -n mongoce
+```
+
+If you need to add docker pull secret to the global openshift check the [documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.14/html/images/managing-images#images-update-global-pull-secret_using-image-pull-secrets).
+
+
+
 ## Deploy the blueprint 
 
 
@@ -75,6 +78,10 @@ oc create -f mongoce-blueprint.yaml
 ```
 
 The `preBackupHook` and `postBackupHook` must be applied before and after the policy execute.
+
+The `postRestoreHookError` must be applied after the policy execute if there is an error during policy backup.
+
+TODO update the image to include the error hook
 
 ![Setting up pre and post backup hook](./pre-post-snapshot-actions-hook.png)
 

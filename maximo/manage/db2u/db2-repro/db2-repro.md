@@ -112,15 +112,6 @@ oc ibm-pak launch ${CASE_NAME}         \
     --action installCatalog
 ```
 
-Install the Db2 catalog:
-```
-oc ibm-pak launch ${CASE_NAME}         \
-    --version ${CASE_VERSION}          \
-    --namespace openshift-marketplace  \
-    --inventory db2uOperatorSetup      \
-    --action installCatalog
-```
-
 Now you can install the db2 operator 
 ```
 oc create ns db2u
@@ -182,34 +173,26 @@ Then at this point the operator installed properly and the api were available
 
 ## Kubelet config 
 
-TODO: is it really necessary ? We were able to deploy the simple example without this configuration. See [Documentation](https://www.ibm.com/docs/en/db2/11.5.x?topic=lpdus-configuring-red-hat-openshift-set-ipc-kernel-parameters)
+We were able to deploy the simple example without this configuration. See [Documentation](https://www.ibm.com/docs/en/db2/11.5.x?topic=lpdus-configuring-red-hat-openshift-set-ipc-kernel-parameters)
 
 ## Create a db2u cluster 
 
-[Documentation](https://www.ibm.com/docs/en/db2/11.5.x?topic=resource-deploying-db2-using-db2uinstance-custom#db2_cluster_api__example_db2uinstance_cr__title__1)
+[Documentation](https://www.ibm.com/docs/en/db2/11.5.x?topic=resource-deploying-db2-using-db2ucluster-custom)
 
-The following example shows the CR code to deploy a Db2 Cluster. The CR creates a Db2 instance with the following configuration:
-- Database name: BLUDB.
-- 4 CPUs.
-- 16 GB of memory.
-- 5 storage volumes (meta, data, backup, archivelogs, and tempts).
-- DB2 4K SUPPORT enabled.
-- LDAP disabled.
-- Privileged instance.
 
 ```
-oc create -f db2instance.yaml
+oc create -f mas-masdev-masdev-manage-db2ucluster.yaml
 ```
 
-Check your instance is deployed 
+Check your instance is deployed and ready 
 ```
-oc get db2uinstances.db2u.databases.ibm.com -n db2u
+oc get db2ucluster -n db2u
 ```
 
 should return 
 ```
-NAME          STATE   MAINTENANCESTATE   AGE
-db2-example   Ready   None               31m
+NAME                       STATE   MAINTENANCESTATE   AGE
+mas-masdev-masdev-manage   Ready   None               25h
 ```
 
 and when checking the pod 
@@ -217,14 +200,15 @@ and when checking the pod
 oc get po -n db2u
 ```
 
-you should see the operator podsn one etcd and one db2 pod running.
+you should see the operator pods, the etcd and db2 pods running.
 ```
 NAME                                                READY   STATUS      RESTARTS   AGE
-c-db2-example-db2u-0                                1/1     Running     0          28m
-c-db2-example-etcd-0                                1/1     Running     0          28m
-c-db2-example-restore-morph-g97n6                   0/1     Completed   0          19m
-db2u-day2-ops-controller-manager-5bdcbfd869-qq22p   1/1     Running     0          3h54m
-db2u-operator-manager-fdc864bd7-8drbx               1/1     Running     0          3h54m
+c-mas-masdev-masdev-manage-db2u-0                   1/1     Running     0          25h
+c-mas-masdev-masdev-manage-etcd-0                   1/1     Running     0          25h
+c-mas-masdev-masdev-manage-instdb-h5jnb             0/1     Completed   0          25h
+c-mas-masdev-masdev-manage-restore-morph-px5lh      0/1     Completed   0          25h
+db2u-day2-ops-controller-manager-5bdcbfd869-vtl6w   1/1     Running     0          34h
+db2u-operator-manager-fdc864bd7-9nv59               1/1     Running     0          36h
 ```
 
 ## Create some test data
@@ -235,7 +219,7 @@ Connect to your DB2 instance and create sample data for testing backup and resto
 
 ```bash
 # Connect to the DB2 pod
-oc exec -it c-db2-example-db2u-0 -n db2u -- bash
+oc exec -it c-mas-masdev-masdev-manage-db2u-0  -n db2u -- bash
 
 # Switch to db2inst1 user
 su - db2inst1

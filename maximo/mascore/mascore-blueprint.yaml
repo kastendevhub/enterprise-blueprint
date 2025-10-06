@@ -1,0 +1,43 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata:
+  name: mascore-blueprint
+  namespace: kasten-io
+  annotations:
+    category: manifest
+    description: Blueprint to label specific manifest in application suite core namespace
+actions:
+  preBackupHook:    
+    phases:
+    - func: KubeTask
+      name: labelManifests
+      args:
+        # https://github.com/michaelcourcy/kasten-tools
+        image: michaelcourcy/kasten-tools:8.0.8
+        command:
+        - /bin/bash
+        - -o
+        - errexit
+        - -o
+        - pipefail
+        - x
+        - |
+          NAMESPACE={{ .Namespace.Name }}
+
+          function backupSingleResource {
+            RESOURCE_KIND=$1
+            RESOURCE_NAME=$2
+
+            if [ -z "$3" ]; then
+                RESOURCE_NAMESPACE=$MAS_CORE_NAMESPACE
+            else
+                RESOURCE_NAMESPACE=$3
+            fi
+            
+            echo "Backing up $RESOURCE_KIND/$RESOURCE_NAME in the $RESOURCE_NAMESPACE namespace..."
+            echo "Saving $RESOURCE_KIND/$RESOURCE_NAME to $BACKUP_FOLDER/$RESOURCE_KIND-$RESOURCE_NAME.yaml"
+            # change
+            # kubectl get $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE -o yaml | yq 'del(.metadata.creationTimestamp, .metadata.ownerReferences, .metadata.generation,  .metadata.resourceVersion, .metadata.uid, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"], .status)' >  $BACKUP_FOLDER/$RESOURCE_KIND-$RESOURCE_NAME.yaml
+            kubectl label $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE kasten-backup=true --overwrite
+          }
+

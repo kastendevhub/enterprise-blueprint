@@ -2,9 +2,11 @@
 
 - A blueprint to label all the components that need to be backed up in the namespace `mas-$MAS_INSTANCE_ID-core`
 
-# Backing up the components in the `mas-$MAS_INSTANCE_ID-core` namespace
+# How it works 
 
 We follow the documentation for [backing up](https://www.ibm.com/docs/en/masv-and-l/cd?topic=namespace-backing-up-resources-manually) and [restoring](https://www.ibm.com/docs/en/masv-and-l/cd?topic=core-namespace) the application suite core that leads to a [backup and restore script](https://github.com/ibm-mas/cli/blob/master/image/cli/mascli/backup-restore/mascore-backup-restore.sh).
+
+# Preliminary test 
 
 We change the script : instead of creating the resource manisfest yaml files in your machine we just label the resources with `kasten-backup=true`.
 
@@ -36,3 +38,5 @@ Edit the policy to add frequency, retention and a backup location.
 Find the kasten restore point that contains the component you want to restore using the overwrite option.
 
 Follow the [IBM documentation to validate](https://www.ibm.com/docs/en/masv-and-l/cd?topic=core-validating-restoration-maximo-application-suite) the restoration.
+
+
