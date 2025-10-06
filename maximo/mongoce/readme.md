@@ -61,9 +61,7 @@ oc secrets link default my-dockerhub-secret --for=pull -n mongoce
 If you need to add docker pull secret to the global openshift check the [documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.14/html/images/managing-images#images-update-global-pull-secret_using-image-pull-secrets).
 
 
-
-## Deploy the blueprint 
-
+## Allow discovery of the `MAS_INSTANCE_ID`
 
 we need to find a way to discover the MAS_INSTANCE_ID, always make sure you created the configmap mas-instance-id in the mongoce namespace
 
@@ -80,8 +78,6 @@ oc create -f mongoce-blueprint.yaml
 The `preBackupHook` and `postBackupHook` must be applied before and after the policy execute.
 
 The `postRestoreHookError` must be applied after the policy execute if there is an error during policy backup.
-
-TODO update the image to include the error hook
 
 ![Setting up pre and post backup hook](./pre-post-snapshot-actions-hook.png)
 

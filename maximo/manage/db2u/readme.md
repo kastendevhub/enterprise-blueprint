@@ -49,7 +49,7 @@ oc secrets link default my-dockerhub-secret --for=pull -n mongoce
 
 If you need to add docker pull secret to the global openshift check the [documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.14/html/images/managing-images#images-update-global-pull-secret_using-image-pull-secrets).
 
-## Configure the `preBackupHook` and `postBackupHook` action in the blueprint 
+## Allow discovery of the `db2ucluster` name 
 
 We need to discover the name of the db2ucluster that we want to backup, always make sure you created the configmap db2ucluster-id in the db2u namespace
 

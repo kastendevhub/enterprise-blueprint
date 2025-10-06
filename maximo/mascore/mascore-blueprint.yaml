@@ -4,8 +4,8 @@ metadata:
   name: mascore-blueprint
   namespace: kasten-io
   annotations:
-    category: manifest
-    description: Blueprint to label specific manifest in application suite core namespace
+    category: Manifest 
+    description: Label all the manifests that need to be backup and restore for Maximo Application Suite Core
 actions:
   preBackupHook:    
     phases:
@@ -15,29 +15,123 @@ actions:
         # https://github.com/michaelcourcy/kasten-tools
         image: michaelcourcy/kasten-tools:8.0.8
         command:
-        - /bin/bash
+        - bash
         - -o
         - errexit
         - -o
         - pipefail
-        - x
+        - -c
         - |
           NAMESPACE={{ .Namespace.Name }}
+  
+          
+          # we need to find a way to discover the MAS_INSTANCE_ID
+          # always make sure you created the configmap mas-instance-id in the mongoce namespace
+          # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
+          MAS_INSTANCE_ID=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
+          MAS_CORE_NAMESPACE=$NAMESPACE # MAS_CORE_NAMESPACE=mas-$MAS_INSTANCE_ID-core
 
           function backupSingleResource {
-            RESOURCE_KIND=$1
-            RESOURCE_NAME=$2
-
-            if [ -z "$3" ]; then
-                RESOURCE_NAMESPACE=$MAS_CORE_NAMESPACE
-            else
-                RESOURCE_NAMESPACE=$3
-            fi
-            
-            echo "Backing up $RESOURCE_KIND/$RESOURCE_NAME in the $RESOURCE_NAMESPACE namespace..."
-            echo "Saving $RESOURCE_KIND/$RESOURCE_NAME to $BACKUP_FOLDER/$RESOURCE_KIND-$RESOURCE_NAME.yaml"
-            # change
-            # kubectl get $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE -o yaml | yq 'del(.metadata.creationTimestamp, .metadata.ownerReferences, .metadata.generation,  .metadata.resourceVersion, .metadata.uid, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"], .status)' >  $BACKUP_FOLDER/$RESOURCE_KIND-$RESOURCE_NAME.yaml
-            kubectl label $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE kasten-backup=true --overwrite
+              RESOURCE_KIND=$1
+              RESOURCE_NAME=$2
+  
+              if [ -z "$3" ]; then
+                  RESOURCE_NAMESPACE=$MAS_CORE_NAMESPACE
+              else
+                  RESOURCE_NAMESPACE=$3
+              fi
+              
+              kubectl label $RESOURCE_KIND  $RESOURCE_NAME -n $RESOURCE_NAMESPACE kasten-backup=true --overwrite
           }
+  
+          function backupResources {
+              RESOURCES=$1
+  
+              echo "Labeling all $RESOURCES resources in the $MAS_CORE_NAMESPACE namespace..."
+              kubectl label $RESOURCES -n $MAS_CORE_NAMESPACE kasten-backup=true --overwrite --all
+              
+              numberOfItems=`(kubectl get $RESOURCES -n $MAS_CORE_NAMESPACE -o yaml | yq '.items | length')`
+              
+              for (( i = 0; i < $numberOfItems; i++ ))
+              do
+                  resourceYaml=`(kubectl get $RESOURCES  -n $MAS_CORE_NAMESPACE -o yaml | yq .items[$i])`
+                  resourceKind=`(echo "$resourceYaml" | yq .kind)`
+                  resourceName=`(echo "$resourceYaml" | yq .metadata.name)`
+                  hasCredentials=`(echo "$resourceYaml" | yq '.spec.config.credentials | has("secretName")')`
+                  if [ "$hasCredentials" == "true" ]; then
+                      credentialsName=`(echo "$resourceYaml" | yq .spec.config.credentials.secretName)`
+                      echo "The credentials $credentialsName will be backed up for the resource $resourceName "
+                      backupSingleResource Secret $credentialsName
+                  fi                  
+              done
+          }
+  
+          function checkForManualCertMgmt {
+  
+              echo "Determining if Manual Certificate Management is enabled..."
+              
+              suiteYaml=`(kubectl get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml)`
+              hasCertMgmt=`(echo "$suiteYaml" |  yq '.spec.settings | has("manualCertMgmt")')`
+              if [ "$hasCertMgmt" == "true" ]; then
+                  hasCertMgmtValue=`(echo "$suiteYaml" | yq .spec.settings.manualCertMgmt)`
+                  if [ "$hasCertMgmtValue" == "true" ]; then
+                      echo "Manual Certificate Management is detected - the Secret $MAS_INSTANCE_ID-cert-public will be backed up..."
+                      backupSingleResource Secret $MAS_INSTANCE_ID-cert-public
+                  fi
+              fi
+  
+          }
+  
+          function checkForCustomIssuer {
+  
+              echo "Determining if a custom ClusterIssuer is being used..."
+              
+              suiteYaml=`(kubectl get Suite  $MAS_INSTANCE_ID -n $MAS_CORE_NAMESPACE -o yaml)`
+              hasCustomIssuer=`(echo "$suiteYaml" |  yq '.spec | has("certificateIssuer")')`
+              
+              if [ "$hasCustomIssuer" == "true" ]; then
+                  customIssuerName=`(echo "$suiteYaml" | yq .spec.certificateIssuer.name)`
+                  certManagerNamespace==`(echo "$suiteYaml" | yq .spec.certManagerNamespace)`
+                  echo -e "\n\n+-----------------------------------------------------+\n"
+                  echo -e "ATTENTION!!!\n"
+                  echo -e "A custom ClusterIssuer configuration has been detected!!!"
+                  echo -e "The ClusterIssuer instance name is: $customIssuerName"
+                  echo -e "The cert-manager namespace specified is:  instance name is $certManagerNamespace"
+                  echo -e "Consult cert-manager documentation for details on backing up cert-manager resources https://cert-manager.io/v1.1-docs/configuration/"
+                  echo -e "\n+-----------------------------------------------------+\n"
+                  read  -n 1 -p "It is your responsibilit to back up the ClusterIssuer $customIssuerName and its associasciated Secret resources. Press any key to continue." mainmenuinput
+                  echo -e "\n"
+              else 
+                  echo "Custom ClusterIssuer has not been detected."
+              fi
+  
+          }
+         
+          echo "Starting labelong of MAS Core manifests..."
+          checkForCustomIssuer
+          checkForManualCertMgmt
+          backupSingleResource Subscription ibm-mas-operator
+          backupSingleResource Secret ibm-entitlement
+          backupSingleResource Secret $MAS_INSTANCE_ID-credentials-superuser
+          backupSingleResource OperatorGroup ibm-mas-operator-group
+          backupSingleResource Suite $MAS_INSTANCE_ID
+          backupResources mongocfgs
+          backupResources kafkacfgs
+          backupResources jdbccfgs
+          backupResources slscfgs
+          backupResources bascfgs
+          backupResources workspaces
+          backupResources smtpcfgs
+          backupResources watsonstudiocfgs
+          backupResources objectstoragecfgs
+          backupResources pushnotificationcfgs
+          backupResources scimcfgs
+          backupResources idpcfgs
+          backupResources appconnects
+          backupResources humai
+          backupResources mviedges
 
+
+
+          
+    
