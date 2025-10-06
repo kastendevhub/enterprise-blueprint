@@ -1,6 +1,6 @@
 # Goal 
 
-- A blueprint to backup the db2 database in the db2u namespace 
+A blueprint to backup the db2 database in the db2u namespace 
 
 # How does it work ? 
 
@@ -8,7 +8,7 @@ We follow the IBM documentation for [backing up and restoring manage](https://ww
 
 Where IBM recommand to perform a snapshot of the storage between a suspend and resume operation.
 
-# Repro the nevironment
+# Repro the environment
 
 If you need to repro an environment close to the db2u [we provide a guide](./db2-repro/db2-repro.md) that set up the db2u operator and create a db2ucluster with a very similar configuration than the one you'll find in maximo.
 
@@ -66,7 +66,7 @@ oc apply -f db2u-blueprint.yaml
 
 The `preBackupHook` and `postBackupHook` must be configured in the policy before and after the snapshot execute.
 
-the `postBackupHook` action should also be applied in case of an error, if an error happen during policy run we should still 
+the `postBackupHook` action should also be applied in case of an error, if an error happens during policy run we should still 
 be able to resume the write on the database.
 
 ![Pre and post actions hooks](./pre-post-error-action-hooks.png)
@@ -100,9 +100,13 @@ It will remove all artifacts created by the operator (pvc included)
 4. Configure your restoreaction to: 
 
   * only select pvc, secret and db2ucluster
+  
   ![Only PVC secrets and Db2ucluster](./only-db2ucluster-secrets-pvc.png)
+
   * Apply the transformset 
+
   ![Apply the transformset](./add-trasnformset.png)
+
   * Add the post restore hook action for db2u 
   ![Post restore action](./db2u-post-restore-hook.png)
 
@@ -125,10 +129,10 @@ This not the case with the operator version `db2u-operator.v120101.0.1` we use f
 
 However if that happen just restore the password with kasten using the overwrite option 
 
-[Overwrite](./overwrite.png)
+![Overwrite](./overwrite.png)
 
 And deselect all artifacts except the instance password 
 
-[Only instance password](./only-instance-password.png)
+![Only instance password](./only-instance-password.png)
 
 The delete the `c-<db2ucluter name>--db2u-0` pod, it will restart with the appropriate secret.

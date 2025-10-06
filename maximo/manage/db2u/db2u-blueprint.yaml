@@ -73,6 +73,7 @@ actions:
           - -c
           - |
             manage_snapshots --action resume
+  
   postRestoreHook:    
     phases:
     - func: KubeTask
