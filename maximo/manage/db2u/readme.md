@@ -107,7 +107,7 @@ It will remove all artifacts created by the operator (pvc included)
 
   * Apply the transformset 
 
-  ![Apply the transformset](./add-trasnformset.png)
+  ![Apply the transformset](./add-transformset.png)
 
   * Add the post restore hook action for db2u 
   ![Post restore action](./db2u-post-restore-hook.png)
