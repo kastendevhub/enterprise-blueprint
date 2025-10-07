@@ -1,21 +1,17 @@
 kind: TransformSet
 apiVersion: config.kio.kasten.io/v1alpha1
 metadata:
-  name: remove-db2cluster-annotations
+  name: replace-ssl-secretname-db2ucluster
   namespace: kasten-io
 spec:
-  transforms:
+  transforms:    
     - subject:
         resource: db2uclusters
-      name: remove-db2ucluster-annotations
+      name: replace-ssl-secretname
       json:
+        - op: replace
+          path: /spec/environment/database/ssl/secretName
+          value: c-mas-masdev-masdev-manage-db2ssl
+          # value: db2u-certificate-mas-masdev-masdev-manage # previously was '[secure]' --- IGNORE ---
         - op: remove
           path: /metadata/annotations
-    - subject:
-        resource: db2uclusters
-      name: remove-db2ucluster-annotations
-      json:
-        - op: remove
-          path: /metadata/annotations
-        - op: remove
-          path: /spec/environment/database/ssl
