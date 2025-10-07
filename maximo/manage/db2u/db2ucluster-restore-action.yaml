@@ -24,7 +24,7 @@ spec:
     - subject: {}
       json: null
       transformSetRef:
-        name: remove-db2cluster-annotations
+        name: replace-ssl-secretname-db2ucluster
         namespace: kasten-io
   hooks:
     onSuccess:

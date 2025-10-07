@@ -82,9 +82,8 @@ While this process work a simpler approach can be taken :
 
 ## With the kasten UI 
 
-1. review edit and apply the transformset `replace-ssl-secretname-db2ucluster.yaml`. 
-You need to provide the name of the secret that will be used to build certificate used by the manage clients.
-It's a secret with 3 entry : ca.crt, tls.key, tls.pem.
+1. review edit and create the transformset `replace-ssl-secretname-db2ucluster.yaml`. 
+You need to provide the name of the secret that will be used to build certificate used by the manage clients. It's a secret with 3 entries : ca.crt, tls.crt, tls.key.
 
 ```
 oc create -f replace-ssl-secretname-db2ucluster.yaml

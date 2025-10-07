@@ -86,7 +86,7 @@ spec:
         DB2AUTH: OSAUTHDB,ALLOW_LOCAL_FALLBACK,PLUGIN_AUTO_RELOAD
     ldap:
       blueAdminPassword: '[secure]'
-      enabled: false
+      enabled: true
       password: '[secure]'
     mln:
       total: 1
