@@ -18,7 +18,7 @@ In order to validate the blueprint execute the following command
 ```
 # adapt the name of the pod to your environment
 oc exec -n db2u -it c-mas-masdev-masdev-manage-db2u-0 -- /bin/sh
-manage_snapshots --action suspend
+manage_snapshots --action su spend
 # confirm HA monitoring is disabled 
 wvcli system status
 
@@ -49,16 +49,8 @@ oc secrets link default my-dockerhub-secret --for=pull -n mongoce
 
 If you need to add docker pull secret to the global openshift check the [documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.14/html/images/managing-images#images-update-global-pull-secret_using-image-pull-secrets).
 
-## Allow discovery of the `db2ucluster` name 
 
-We need to discover the name of the db2ucluster that we want to backup, always make sure you created the configmap db2ucluster-id in the db2u namespace
-
-```
-oc create configmap -n db2u db2ucluster-id --from-literal db2ucluster-id=mas-masdev-masdev-manage
-```
-
-Review the blueprint [db2u-blueprint.yaml](./db2u-blueprint.yaml) for the
-`preBackupHook` and `postBackupHook` action and apply it.
+## Apply the blueprint and configure the policy
 
 ```
 oc apply -f db2u-blueprint.yaml 
@@ -76,69 +68,54 @@ Run once the policy to check there is no error during backup.
 
 ## Restoring db2 
 
-We should follow this steps :[Using container commands - Db2uInstance](https://www.ibm.com/docs/en/db2/11.5.x?topic=restores-using-container-commands-db2uinstance) to restore from a previous backup.
+We follow this steps in IBM documentation [using container commands - Db2uInstance](https://www.ibm.com/docs/en/db2/11.5.x?topic=restores-using-container-commands-db2ucluster).
 
-While this process work a simpler approach can be taken : 
-
-## With the kasten UI 
-
-1. review edit and create the transformset `replace-ssl-secretname-db2ucluster.yaml`. 
-You need to provide the name of the secret that will be used to build certificate used by the manage clients. It's a secret with 3 entries : ca.crt, tls.crt, tls.key.
+Suspend reconciliation with the operator
 
 ```
-oc create -f replace-ssl-secretname-db2ucluster.yaml
+DB2U_CLUSTER=$(oc get db2ucluster --no-headers | head -n1 | awk '{print $1}'); echo $DB2U_CLUSTER
+oc annotate db2ucluster $DB2U_CLUSTER db2u.databases.ibm.com/maintenance-pause-reconcile=true --overwrite
 ```
 
-2. delete the db2cluster :
+Scale down the statefulsets and deployment
 ```
-oc delete db2uclusters.db2u.databases.ibm.com mas-masdev-masdev-manage 
-```
-It will remove all artifacts created by the operator (pvc included)
-
-3. Find your restore point 
-
-![Find the db2u restore point](./find-restore-point-db2u.png)
-
-4. Configure your restoreaction to: 
-
-  * only select pvc, secret and db2ucluster
-  
-  ![Only PVC secrets and Db2ucluster](./only-db2ucluster-secrets-pvc.png)
-
-  * Apply the transformset 
-
-  ![Apply the transformset](./add-transformset.png)
-
-  * Add the post restore hook action for db2u 
-  ![Post restore action](./db2u-post-restore-hook.png)
-
-5. Connect to db2u and check all your data are up and running
-
-## With the Kasten API 
-
-Even simpler, edit the file [db2ucluster-restore-action.yaml](./db2ucluster-restore-action.yaml) by changing line 11 by the name of the restore point.
-
-Then you just have to apply it 
-```
-oc create -f db2ucluster-restore-action.yaml
+DB2U_STS=$(oc get sts --selector="app=${DB2U_CLUSTER},type=engine" --no-headers | awk '{print $1}'); echo $DB2U_STS
+ETCD_STS=$(oc get sts --selector="app=${DB2U_CLUSTER},component=etcd" --no-headers | awk '{print $1}'); echo $ETCD_STS
+LDAP_DEP=$(oc get deployment --selector="app=${DB2U_CLUSTER},role=ldap" --no-headers | awk '{print $1}'); echo $LDAP_DEP
+NUM_REPLICAS=$(oc get sts ${DB2U_STS} -ojsonpath={.spec.replicas}); echo $NUM_REPLICAS
+oc scale sts ${DB2U_STS} --replicas=0
+oc scale sts ${ETCD_STS} --replicas=0
+oc scale deploy ${LDAP_DEP} --replicas=0
 ```
 
-## About the instance password
+Make sure that except the 2 operator pods all the pods are deleted, if there is pod in completed state delete them because they are still attached to the PVCs. 
 
-On some environment we noticed that the `c-<db2ucluter name>-instancepassword` secret is regenerated to another value. 
+**Now use Kasten to replace only the PVC**
 
-This not the case with the operator version `db2u-operator.v120101.0.1` we use for the test.
-
-However if that happen just restore the password with kasten using the overwrite option 
-
-![Overwrite](./overwrite.png)
-
-And deselect all artifacts except the instance password 
-
-![Only instance password](./only-instance-password.png)
-
-Then delete the `c-<db2ucluter name>--db2u-0` pod, it will restart with the appropriate secret.
-
+Scale up the workload
 ```
-oc delete po -n db2u c-<db2ucluter name>-db2u-0
+oc scale sts ${ETCD_STS} --replicas=1
+oc scale sts ${DB2U_STS} --replicas=${NUM_REPLICAS}
+oc scale deploy ${LDAP_DEP} --replicas=1
+```
+
+Make sure all the pods are up and running, the db2u-0 pod often need 2 to 3 minutes to fully restart 
+```
+NAME                                                READY   STATUS    RESTARTS   AGE
+c-mas-masdev-masdev-manage-db2u-0                   1/1     Running   0          2m30s
+c-mas-masdev-masdev-manage-etcd-0                   1/1     Running   0          4m35s
+c-mas-masdev-masdev-manage-ldap-6bfd556456-jvp4m    1/1     Running   0          4m15s
+db2u-day2-ops-controller-manager-5bdcbfd869-vtl6w   1/1     Running   0          6d5h
+db2u-operator-manager-fdc864bd7-9nv59               1/1     Running   0          6d7h
+```
+
+Bring the database out of write-suspend after restoring:
+```
+CATALOG_POD=$(oc get po -l name=dashmpp-head-0,app=${DB2U_CLUSTER} --no-headers | awk '{print $1}'); echo $CATALOG_POD
+oc exec -it ${CATALOG_POD} -- manage_snapshots --action restore
+```
+
+Restart operator reconciliation 
+```
+oc annotate db2ucluster $DB2U_CLUSTER db2u.databases.ibm.com/maintenance-pause-reconcile- --overwrite
 ```

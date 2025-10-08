@@ -5,7 +5,7 @@ metadata:
   namespace: kasten-io
   annotations:
     category: database
-    description: Blueprint to suspend and resume Maximo Application Suite Manage during snapshot
+    description: Blueprint to suspend and resume Maximo Application Suite Manage before and after the snapshots of the pvc
 actions:
   preBackupHook:    
     phases:
@@ -20,16 +20,16 @@ actions:
         - |
           NAMESPACE={{ .Namespace.Name }}
 
-          # we need to find a way to discover the name of the db2ucluster
-          # always make sure you created the configmap db2ucluster-id in the db2u namespace
-          # oc create configmap -n db2u db2ucluster-id --from-literal db2ucluster-id=mas-masdev-masdev-manage
-          db2ucluster_name=$(kubectl get configmap -n $NAMESPACE db2ucluster-id -o jsonpath='{.data.db2ucluster-id}')
-          kando output db2ucluster_name $db2ucluster_name
+          DB2U_CLUSTER=$(kubectl -n $NAMESPACE get db2ucluster --no-headers | head -n1 | awk '{print $1}'); echo $DB2U_CLUSTER
+          kando output db2ucluster_name $DB2U_CLUSTER
+          DB2U_STS=$(kubectl -n $NAMESPACE get sts --selector="app=${DB2U_CLUSTER},type=engine" --no-headers | awk '{print $1}'); echo $DB2U_STS
+          kando output db2usts_name $DB2U_STS
+
     - func: KubeExec
       name: suspendDb2Writing
       args:
         namespace: "{{ .Namespace.Name }}"        
-        pod: c-{{ .Phases.preBackupDiscovery.Output.db2ucluster_name }}-db2u-0
+        pod: '{{ .Phases.preBackupDiscovery.Output.db2usts_name }}-0'
         container: db2u
         command:
           - bash
@@ -53,16 +53,15 @@ actions:
         - |
           NAMESPACE={{ .Namespace.Name }}
 
-          # we need to find a way to discover the name of the db2ucluster
-          # always make sure you created the configmap db2ucluster-id in the db2u namespace
-          # oc create configmap -n db2u db2ucluster-id --from-literal db2ucluster-id=mas-masdev-masdev-manage
-          db2ucluster_name=$(kubectl get configmap -n $NAMESPACE db2ucluster-id -o jsonpath='{.data.db2ucluster-id}')
-          kando output db2ucluster_name $db2ucluster_name
+          DB2U_CLUSTER=$(kubectl -n $NAMESPACE get db2ucluster --no-headers | head -n1 | awk '{print $1}'); echo $DB2U_CLUSTER
+          kando output db2ucluster_name $DB2U_CLUSTER
+          DB2U_STS=$(kubectl -n $NAMESPACE get sts --selector="app=${DB2U_CLUSTER},type=engine" --no-headers | awk '{print $1}'); echo $DB2U_STS
+          kando output db2usts_name $DB2U_STS
     - func: KubeExec
       name: resumeDb2Writing
       args:
         namespace: "{{ .Namespace.Name }}"        
-        pod: c-{{ .Phases.postBackupDiscovery.Output.db2ucluster_name }}-db2u-0
+        pod: '{{ .Phases.postBackupDiscovery.Output.db2usts_name }}-0'
         container: db2u
         command:
           - bash
@@ -74,49 +73,4 @@ actions:
           - |
             manage_snapshots --action resume
   
-  postRestoreHook:    
-    phases:
-    - func: KubeTask
-      name: postRestoreDiscovery
-      args:
-        # https://github.com/michaelcourcy/kasten-tools
-        image: michaelcourcy/kasten-tools:8.0.8
-        command:
-        - sh
-        - -cx
-        - |
-          NAMESPACE={{ .Namespace.Name }}
-
-          # we need to find a way to discover the name of the db2ucluster
-          # always make sure you created the configmap db2ucluster-id in the db2u namespace
-          # oc create configmap -n db2u db2ucluster-id --from-literal db2ucluster-id=mas-masdev-masdev-manage
-          db2ucluster_name=$(kubectl get configmap -n $NAMESPACE db2ucluster-id -o jsonpath='{.data.db2ucluster-id}')
-          kando output db2ucluster_name $db2ucluster_name
-    - func: WaitV2
-      name: waitForDb2uPodReady
-      args:
-        timeout: 10m
-        conditions:
-          anyOf:
-          - condition: '{{ $available := false }}{{ range $condition := $.status.conditions }}{{ if and (eq .type "Ready") (eq .status "True") }}{{ $available = true }}{{ end }}{{ end }}{{ $available }}'
-            objectReference:
-              apiVersion: "v1"
-              group: ""
-              name: "c-{{ .Phases.postRestoreDiscovery.Output.db2ucluster_name }}-db2u-0"
-              namespace: "{{ .Namespace.Name }}"
-              resource: "pods"
-    - func: KubeExec
-      name: resumeDb2WritingAfterRestore
-      args:
-        namespace: "{{ .Namespace.Name }}"        
-        pod: c-{{ .Phases.postRestoreDiscovery.Output.db2ucluster_name }}-db2u-0
-        container: db2u
-        command:
-          - bash
-          - -o
-          - errexit
-          - -o
-          - pipefail
-          - -c
-          - |
-            manage_snapshots --action resume
+  
