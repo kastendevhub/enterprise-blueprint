@@ -47,15 +47,16 @@ In Kubenetes this is supported by adding the parameter `backingSnapshot: true` t
 
 You can create a specific storage class which is a clone of the cephfs whith the parameter `backingSnapshot: "true"`.
 
-Also Kasten need to know that this volume can be mounted in read only mode to the data mover for this we have the `k10.kasten.io/sc-supports-read-only-mount: "true"` annotations
+Also Kasten need to know that this volume must be created in ReadOnlyMany mode (ROX) for this we have to set up the `k10.kasten.io/sc-supports-read-only-mount: "true"` annotations on the storage class.
 
 Here is an example of how you can proceed to create this new storage class 
 
+clone your manifest in a file 
 ```
 oc get sc ocs-storagecluster-cephfs -o yaml > ocs-storagecluster-cephfs-shallow.yaml
 ```
 
-Then edit it, change the name, add the parameter and the annotation.
+Then edit it, change the name, add the parameter and the annotation. Here is an example but the value will depends on your own setting.
 ```
 allowVolumeExpansion: true
 apiVersion: storage.k8s.io/v1
