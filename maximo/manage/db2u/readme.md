@@ -29,6 +29,12 @@ manage_snapshots --action resume
 wvcli system status
 ```
 
+# important consideration about ceph FS 
+
+If your installation use CephFS volume you may have some serious performance issue for cloning the cephFS snapshot during export. 
+
+Thanks to shallow volume this problem can be overcome but you need to [follow this guide](../../../managing-cephfs/readme.md) to configure it properly in your kasten policy.
+
 # Install and execute the blueprint 
 
 ## If you pull from a private registry or docker hub
