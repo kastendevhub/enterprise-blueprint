@@ -16,7 +16,7 @@ cd maximo/manage
 manage-backup-restore.sh -i <MAS_INSTANCE_ID> -w <MAS_WORKSPACE_ID>  -f ./ -m backup
 ```
 
-Now, We only have to create a policy of the `mas-$MAS_INSTANCE_ID-manage` namespace that include only resources that have the label `kasten-backup:true`.
+Now, We only have to create a policy of the `mas-$MAS_INSTANCE_ID-manage` namespace that include only resources that have the label `kasten-backup:true` and the pvc.
 
 ![Label filter](./label-filter.png)
 
@@ -39,7 +39,7 @@ Then deploy the blueprint
 oc create -f manage-blueprint.yaml 
 ```
 
-Only the The `preBackupHook` need to be configured in the policy.
+Only the `preBackupHook` need to be configured in the policy.
 
 ![Setting up pre backup hook](./only-pre-backup-hook.png)
 

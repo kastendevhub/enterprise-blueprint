@@ -16,7 +16,7 @@ cd maximo/mascore
 ./mascore-backup-restore.sh -i <MAS_INSTANCE_ID> -f ./ -m backup
 ```
 
-Now, we only have to create a policy for the `mas-$MAS_INSTANCE_ID-core` namespace that include only resource that have the label `kasten-backup:true`.
+Now, we only have to create a policy for the `mas-$MAS_INSTANCE_ID-core` namespace that include only resource that have the label `kasten-backup:true` and the pvc.
 
 ![Label filter](./label-filter.png)
 
