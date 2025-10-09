@@ -107,4 +107,74 @@ exportData:
 Now export of cephFS volume are much more efficient but for the same reason explained above you should not restore from a ceph FS snapshot instead you should use the exported restore point to restore those volumes.
 
 
+# Test the difference performance when cloning 
+
+Create a workload with cephfs 
+
+```
+oc create -f workload-cephfs.yaml 
+```
+
+Set up your context and check the logs to see if all the files where created 
+```
+oc project test-calibrate-100k-10k
+oc logs deployment/workload-calibrate-1 
+```
+
+check the size regulary
+```
+oc exec -it deployment/workload-calibrate-1 -- du -hs /data
+```
+
+When you are close to 1gb (for instance 976.5M  /data) you can create a snap.
+
+Create a snapshot : 
+```
+oc create -f snap-workload.yaml 
+```
+
+Check if the snap is ready to use
+```
+oc get volumesnashot -w
+```
+
+Clone it with the ocs-storagecluser-cephfs storage class 
+```
+oc create -f clone-ocs-storagecluster-cephfs.yaml
+```
+
+The pvc will be pending with a lot of message in its event like 
+```
+  Warning  ProvisioningFailed    3s (x8 over 2m)     openshift-storage.cephfs.csi.ceph.com_csi-cephfsplugin-provisioner-fc86bf65f-82jkg_eacf7ad8-91c5-4621-9a8d-6e13109c994b  failed to provision volume with StorageClass "ocs-storagecluster-cephfs": rpc error: code = Aborted desc = clone from snapshot is already in progress
+```
+
+After 13 minutes the pvc is still pending... 
+```
+NAME                              STATUS    VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS                VOLUMEATTRIBUTESCLASS   AGE
+calibrate-1                       Bound     pvc-af6b75c8-ff4d-4095-b43a-bf77680c8197   32Gi       RWO            ocs-storagecluster-cephfs   <unset>                 30m
+pvc-clone-from-snap-calibrate-1   Pending                                                                        ocs-storagecluster-cephfs   <unset>                 13m
+```
+
+Let's delete it and create a clone with the swallow volume.
+```
+oc delete pvc pvc-clone-from-snap-calibrate-1
+oc create -f clone-ocs-storagecluster-cephfs-shallow.yaml
+```
+
+In less than 5s the volume is ready 
+```
+oc get pvc
+NAME                                      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS                        VOLUMEATTRIBUTESCLASS   AGE
+calibrate-1                               Bound    pvc-af6b75c8-ff4d-4095-b43a-bf77680c8197   32Gi       RWO            ocs-storagecluster-cephfs           <unset>                 44m
+pvc-clone-from-snap-calibrate-1-shallow   Bound    pvc-f7c87687-255e-452d-b510-c05692384436   32Gi       ROX            ocs-storagecluster-cephfs-shallow   <unset>                 7s
+```
+
+Notice that the access mode is ROW (Read Only many) for this clone.
+
+clean up 
+```
+oc delete ns test-calibrate-100k-10k
+```
+
+
 

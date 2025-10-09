@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-clone-from-snap-calibrate-1-shallow
+  namespace: test-calibrate-100k-10k
+spec:
+  storageClassName: ocs-storagecluster-cephfs-shallow
+  dataSource:
+    name: snap-calibrate-1
+    kind: VolumeSnapshot
+    apiGroup: snapshot.storage.k8s.io
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 32Gi
