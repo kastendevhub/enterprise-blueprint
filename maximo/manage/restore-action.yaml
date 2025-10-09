@@ -1,0 +1,17 @@
+kind: RestoreAction
+apiVersion: actions.kio.kasten.io/v1alpha1
+metadata:
+  generateName: db2ucluster-restore-action-
+  namespace: db2u  
+spec:
+  subject:
+    apiVersion: apps.kio.kasten.io/v1alpha1
+    kind: RestorePoint
+    # provide the name of the restore point you want to use for the restore (oc get restorepoint -n db2u to list them)    
+    name: <your restore point name>
+    namespace: db2u
+  targetNamespace: db2u
+  filters:
+    includeResources:
+      - version: v1
+        resource: persistentvolumeclaims      

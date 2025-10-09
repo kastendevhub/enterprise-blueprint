@@ -88,6 +88,14 @@ oc scale sts ${ETCD_STS} --replicas=0
 oc scale deploy ${LDAP_DEP} --replicas=0
 ```
 
+oc get pvc|awk '{print $1}'
+NAME
+activelogs-c-mas-masdev-masdev-manage-db2u-0
+c-mas-masdev-masdev-manage-backup
+c-mas-masdev-masdev-manage-meta
+data-c-mas-masdev-masdev-manage-db2u-0
+tempts-c-mas-masdev-masdev-manage-db2u-0
+
 Make sure that except the 2 operator pods all the pods are deleted, if there is pod in completed state delete them because they are still attached to the PVCs. 
 
 **Now use Kasten to replace only the PVC**

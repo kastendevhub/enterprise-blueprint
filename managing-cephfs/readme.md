@@ -33,7 +33,7 @@ CephFS cloning is slow and resource-intensive because:
 - Full data copy: When cloning a CephFS snapshot to a new volume, the CSI driver must copy all the file data, not just metadata.
 - Directory tree reconstruction: The entire directory structure and all file contents must be duplicated.
 
-See the [performance test](#test-the-difference-performance-when-cloning) to understand the impact but this is very impactful from 5s to 20 minutes !!
+See the [performance test](#test-the-difference-performance-when-cloning) to understand the impact but this is very impactful from 5s to 20 minutes for 1Gb of data !!
 
 ## How can we adress this issue ? 
 
