@@ -174,7 +174,7 @@ calibrate-1                               Bound    pvc-af6b75c8-ff4d-4095-b43a-b
 pvc-clone-from-snap-calibrate-1-shallow   Bound    pvc-f7c87687-255e-452d-b510-c05692384436   32Gi       ROX            ocs-storagecluster-cephfs-shallow   <unset>                 7s
 ```
 
-Notice that the access mode is ROW (Read Only many) for this clone.
+Notice that the access mode is ROX (Read Only many) for this clone.
 
 clean up 
 ```
