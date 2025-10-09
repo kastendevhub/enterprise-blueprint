@@ -112,7 +112,7 @@ exportData:
 Now export of cephFS volume are much more efficient but for the same reason explained above you should not restore from a ceph FS snapshot instead you should use the exported restore point to restore those volumes.
 
 
-# Test the difference performance when cloning 
+## Test the difference performance when cloning 
 
 Create a workload with cephfs 
 
@@ -120,7 +120,7 @@ Create a workload with cephfs
 oc create -f workload-cephfs.yaml 
 ```
 
-Set up your context and check the logs to see if all the files where created 
+Set up your context and check the logs to see if all the files are created 
 ```
 oc project test-calibrate-100k-10k
 oc logs deployment/workload-calibrate-1 
@@ -160,7 +160,7 @@ calibrate-1                       Bound     pvc-af6b75c8-ff4d-4095-b43a-bf77680c
 pvc-clone-from-snap-calibrate-1   Pending                                                                        ocs-storagecluster-cephfs   <unset>                 13m
 ```
 
-Let's delete it and create a clone with the swallow volume.
+Let's delete it and create a clone with the shallow volume.
 ```
 oc delete pvc pvc-clone-from-snap-calibrate-1
 oc create -f clone-ocs-storagecluster-cephfs-shallow.yaml
