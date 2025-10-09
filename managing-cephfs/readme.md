@@ -56,7 +56,9 @@ clone your manifest in a file
 oc get sc ocs-storagecluster-cephfs -o yaml > ocs-storagecluster-cephfs-shallow.yaml
 ```
 
-Then edit it, change the name, add the parameter and the annotation. Here is an example but the value will depends on your own setting.
+Then edit it, change the name, add the parameter and the annotation. 
+
+Here is an example but the other fields will depends on your own setting do not apply this manifest in your cluster !
 ```
 allowVolumeExpansion: true
 apiVersion: storage.k8s.io/v1
