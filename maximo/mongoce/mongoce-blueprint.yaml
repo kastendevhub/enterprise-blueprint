@@ -72,7 +72,7 @@ actions:
               allowPrivilegeEscalation: false
             containers:
             - name: mongoce-backup
-              image: {{ .Phases.backupDiscovery.Output.image }}
+              image: mongo:6.0
               command: ["/bin/bash", "-c", "while true; do sleep 30; done"]
               securityContext:
                 allowPrivilegeEscalation: false
