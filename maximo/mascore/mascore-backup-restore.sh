@@ -155,12 +155,6 @@ command -v kubectl >/dev/null 2>&1 || { echo >&2 "Required executable \"kubectl\
 command -v yq >/dev/null 2>&1 || { echo >&2 "Required executable \"yq\" not found on PATH.  Aborting."; exit 1; }
 
 
-kubectl whoami &> /dev/null
-if [[ "$?" == "1" ]]; then
-  echo "You must be logged in to your OpenShift cluster to proceed (oc login)"
-  exit 1
-fi
-
 
 if [ "$MODE" == "backup" ]; then
     echo "Starting MAS Core backup using the instance id $MAS_INSTANCE_ID to $BACKUP_FOLDER"
