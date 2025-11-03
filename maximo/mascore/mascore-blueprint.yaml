@@ -17,8 +17,6 @@ actions:
         command:
         - bash
         - -o
-        - errexit
-        - -o
         - pipefail
         - -c
         - |
@@ -109,13 +107,13 @@ actions:
   
           }
          
-          echo "Starting labelong of MAS Core manifests..."
+          echo "Starting labeling of MAS Core manifests..."
           checkForCustomIssuer
           checkForManualCertMgmt
-          backupSingleResource Subscription ibm-mas-operator
+          backupResources subscriptions
+          backupResources operatorgroups
           backupSingleResource Secret ibm-entitlement
           backupSingleResource Secret $MAS_INSTANCE_ID-credentials-superuser
-          backupSingleResource OperatorGroup ibm-mas-operator-group
           backupSingleResource Suite $MAS_INSTANCE_ID
           backupResources mongocfgs
           backupResources kafkacfgs
