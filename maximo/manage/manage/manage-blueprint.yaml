@@ -17,8 +17,6 @@ actions:
         command:
         - bash
         - -o
-        - errexit
-        - -o
         - pipefail
         - -c
         - |
@@ -97,11 +95,8 @@ actions:
 
           echo "Starting labeling resource in manage namespace using the instance id $MAS_INSTANCE_ID and workspace id $MAS_WORKSPACE_ID"
           
-          backupSingleResource Subscription ibm-mas-manage $MAS_MANAGE_NAMESPACE
-          # backupSingleResource OperatorGroup ibm-manage-operatorgroup $MAS_MANAGE_NAMESPACE
-          OPERATOR_GROUP=$(kubectl get operatorgroup -n mas-$MAS_INSTANCE_ID-manage -o name)
-          OPERATOR_GROUP_NEW=$(echo "$OPERATOR_GROUP" | sed -E 's/.*\/(.+)/\1/')
-          backupSingleResource OperatorGroup $OPERATOR_GROUP_NEW $MAS_MANAGE_NAMESPACE
+          backupResources subscriptions $MAS_MANAGE_NAMESPACE 
+          backupResources operatorgroups $MAS_MANAGE_NAMESPACE 
           backupSingleResource Secret ibm-entitlement $MAS_MANAGE_NAMESPACE
           backupSingleResource Secret $MAS_WORKSPACE_ID-manage-encryptionsecret $MAS_MANAGE_NAMESPACE
           backupSingleResource Secret $MAS_WORKSPACE_ID-manage-encryptionsecret-operator $MAS_MANAGE_NAMESPACE
