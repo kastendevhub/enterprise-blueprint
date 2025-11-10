@@ -1,4 +1,6 @@
-# Generic volume backup on Openshift
+# Generic storage backup on Openshift 
+
+`Generic storage backup` (GSB) is also called `Generic volume backup` (GVB) or `Generic volume snapshot` (GVS). We conform to the official nomenclature : GSB.
 
 ## Goal
 
