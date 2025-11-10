@@ -70,7 +70,6 @@ Download [k10tools](https://github.com/kastenhq/external-tools/releases) and exe
 
 You should get this output 
 ```
-./k10tools k10genericbackup inject all -n basic-app
 Inject deployment:
   Injecting sidecar to deployment basic-app/basic-app
   Updating deployment basic-app/basic-app
@@ -80,7 +79,7 @@ Inject deployment:
 
 check now that your deployment has 2 containers 
 ```
-oc get deploy <your namespace> -o jsonpath='{.spec.template.spec.containers[*].name}'
+oc get deploy <your deployment> -n <your namespace> -o jsonpath='{.spec.template.spec.containers[*].name}'
 ```
 
 you should see  this output
@@ -88,7 +87,7 @@ you should see  this output
 <your container> kanister-sidecar
 ```
 
-Also `oc get po` show 2/2 
+Also `oc get po -n <your namespace>` show 2/2 
 
 ```
 oc get po 
