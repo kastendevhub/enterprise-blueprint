@@ -1,0 +1,11 @@
+[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/1/securityContext",
+    "value": {
+      "capabilities": {
+        "add": ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
+      }
+    }
+  }
+]
