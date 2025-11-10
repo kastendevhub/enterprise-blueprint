@@ -24,7 +24,7 @@ backup and restore filesystem operation (using kopia). For that we create a spec
 
 ```
 oc get po <your pod> -n <your namespace>
-oc get po <your pod> -o yaml |grep scc
+oc get po <your pod> -n <your namespace> -o yaml |grep scc
 ```
 
 in my case it's restricted-v2 which is the default scc that you get when you request no specific 
