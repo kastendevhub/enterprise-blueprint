@@ -54,7 +54,7 @@ oc create -f <your-scc>-gsb.yaml
 
 and give the authorization to any service account in the namespace to use this scc 
 ```
-namespace=basic-app
+namespace=<your namespace>
 oc adm policy add-scc-to-group <your-scc>-gsb system:serviceaccounts:$namespace -n $namespace
 ```
 
