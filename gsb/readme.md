@@ -31,11 +31,11 @@ security context privilege for your pods.
 create a copy of this scc adding this [necessary capabilities](https://docs.kasten.io/latest/install/generic.html#required-capabilities-for-generic-storage-backup) for Generic volume backup.
 
 ```
-oc get scc <your-scc> -o yaml > <your-scc>-gvs.yaml 
-vi <your-scc>-gvs.yaml 
+oc get scc <your-scc> -o yaml > <your-scc>-gsb.yaml 
+vi <your-scc>-gsb.yaml 
 ```
 
-Change the name in the metadata section with `<your-scc>-gvs`
+Change the name in the metadata section with `<your-scc>-gsb`
 
 And add 
 ```
@@ -47,13 +47,13 @@ to the `allowedCapabilities` section.
 
 submit it 
 ```
-oc create -f <your-scc>-gvs.yaml 
+oc create -f <your-scc>-gsb.yaml 
 ```
 
 and give the authorization to any service account in the namespace to use this scc 
 ```
 namespace=basic-app
-oc adm policy add-scc-to-group <your-scc>-gvs system:serviceaccounts:$namespace -n $namespace
+oc adm policy add-scc-to-group <your-scc>-gsb system:serviceaccounts:$namespace -n $namespace
 ```
 
 
@@ -104,7 +104,7 @@ of the pods. Review `change-capabilities.json` and apply it to your workload.
 oc patch deployment basic-app -n basic-app --type='json' -p "$(cat change-capabilities.json)"
 ```
 
-Now you should see your pod restarting with the scc `<your-scc>-gvs`
+Now you should see your pod restarting with the scc `<your-scc>-gsb`
 ```
 oc get po -o yaml |grep scc
 ```
@@ -124,9 +124,9 @@ oc exec deploy/<your deployment> -c kanister-sidecar -- kopia
 
 If the capabilities were not there that would not be possible, in this case you would have a message `operation not permitted`.
 
-# Configure Kasten to allow GVS 
+# Configure Kasten to allow gsb 
 
-Because [GVS is not crash consistent](https://docs.kasten.io/latest/install/gvs_restricted.html#restrict-gvs) 
+Because [gsb is not crash consistent](https://docs.kasten.io/latest/install/gvs_restricted.html#restrict-gvs) 
 Kasten want a strict control on who's deploying it and require that you provide a token that they generate for you. 
 
 This token is linked to the UID of your cluster and must be added in your helm configuration. You provide the UID 
