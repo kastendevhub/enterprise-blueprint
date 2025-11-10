@@ -31,7 +31,7 @@ security context privilege for your pods.
 create a copy of this scc adding this [necessary capabilities](https://docs.kasten.io/latest/install/generic.html#required-capabilities-for-generic-storage-backup) for Generic volume backup.
 
 ```
-oc get scc <your-scc> -o yaml > restricted-v2-gvs.yaml 
+oc get scc <your-scc> -o yaml > <your-scc>-gvs.yaml 
 vi <your-scc>-gvs.yaml 
 ```
 
@@ -104,7 +104,7 @@ of the pods. Review `change-capabilities.json` and apply it to your workload.
 oc patch deployment basic-app -n basic-app --type='json' -p "$(cat change-capabilities.json)"
 ```
 
-Now you should see your pod restarting with the scc restricted-v2-gvs
+Now you should see your pod restarting with the scc `<your-scc>-gvs`
 ```
 oc get po -o yaml |grep scc
 ```
