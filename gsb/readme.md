@@ -90,7 +90,6 @@ you should see  this output
 Also `oc get po -n <your namespace>` show 2/2 
 
 ```
-oc get po 
 NAME                         READY   STATUS    RESTARTS   AGE
 basic-app-759d466dc9-sr6cf   2/2     Running   0          3m19s
 ```
@@ -102,19 +101,19 @@ workload did not claim them. That's what we're going to do now by changing the s
 of the pods. Review `change-capabilities.json` and apply it to your workload.
 
 ```
-oc patch deployment basic-app -n basic-app --type='json' -p "$(cat change-capabilities.json)"
+oc patch deployment <your deployment> -n <your namespace> --type='json' -p "$(cat change-capabilities.json)"
 ```
 
 Now you should see your pod restarting with the scc `<your-scc>-gsb`
 ```
-oc get po -o yaml |grep scc
+oc get po -o yaml -n <your namespace> |grep scc
 ```
 
 Make sure this command is executed against the new pod not the one termnating because of the patch.
 
 control the kanister-sidecar capabilities: 
 ```
-oc get deploy <your deployment> -o jsonpath='{.spec.template.spec.containers[1].securityContext.capabilities}'
+oc get deploy <your deployment> -n <your namespace> -o jsonpath='{.spec.template.spec.containers[1].securityContext.capabilities}'
 {"add":["CHOWN","DAC_OVERRIDE","FOWNER"]}
 ```
 
