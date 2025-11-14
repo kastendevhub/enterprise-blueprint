@@ -98,10 +98,10 @@ basic-app-759d466dc9-sr6cf   2/2     Running   0          3m19s
 
 So far we gave the authorization to the workload to take this capabilities but for the moment the 
 workload did not claim them. That's what we're going to do now by changing the security context 
-of the pods. Review `change-capabilities.json` and apply it to your workload.
+of the pods. 
 
 ```
-oc patch deployment <your deployment> -n <your namespace> --type='json' -p "$(cat change-capabilities.json)"
+oc patch deployment <your deployment> -n <your namespace> --type='strategic' --patch-file patch-kanister-sidecar.yaml
 ```
 
 Now you should see your pod restarting with the scc `<your-scc>-gsb`

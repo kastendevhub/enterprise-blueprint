@@ -1,0 +1,11 @@
+spec:
+  template:
+    spec:
+      containers:
+      - name: kanister-sidecar
+        securityContext:
+          capabilities:
+            add:
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
