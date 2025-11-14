@@ -52,7 +52,7 @@ submit it
 oc create -f <your-scc>-gsb.yaml 
 ```
 
-and give the authorization to any service account in the namespace to use this scc 
+and give the authorization to any service accounts in the namespace to use this scc 
 ```
 namespace=<your namespace>
 oc adm policy add-scc-to-group <your-scc>-gsb system:serviceaccounts:$namespace -n $namespace
@@ -73,6 +73,8 @@ Used By:       basic-app-deployment-84579bf967-6bm9n
 
 From the name you can find out the deployment or the statefulset.
 
+First scale down your deployment or statefulset. 
+
 We need to inject the kanister-sidecar container into your deployment or statefulset.
 Download [k10tools](https://github.com/kastenhq/external-tools/releases) and execute
 
@@ -85,7 +87,6 @@ or
 ```
 ./k10tools k10genericbackup inject statefulset <your statefulset> -n <your namespace>
 ```
-
 
 You should get this output 
 ```
@@ -142,6 +143,9 @@ oc exec deploy/<your deployment> -c kanister-sidecar -- kopia
 ```
 
 If the capabilities were not there that would not be possible, in this case you would have a message `operation not permitted`.
+
+
+Now you can scale up your deployment or statefulset. 
 
 # Configure Kasten to allow gsb 
 
