@@ -149,6 +149,8 @@ Now you can scale up your deployment or statefulset.
 
 # Configure Kasten to allow gsb 
 
+This operation is cluster wide and should only be done once.
+
 Because [gsb is not crash consistent](https://docs.kasten.io/latest/install/gvs_restricted.html#restrict-gvs) 
 Kasten want a strict control on who's deploying it and require that you provide a token that they generate for you. 
 
@@ -179,7 +181,7 @@ It is also possible to use helm `--set option`
 
 # create a policy 
 
-Create a policy `on demand` for the basic-app aplication and set up a location profile for 
+Create a kasten policy for your application set up a location profile for 
 - export 
 - kanister action 
 
