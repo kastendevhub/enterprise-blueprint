@@ -71,6 +71,7 @@ At the end of the output you'll find the list of pods used by this pvc
 Used By:       basic-app-deployment-84579bf967-6bm9n
 ```
 
+From the name you can find out the deployment or the statefulset.
 
 We need to inject the kanister-sidecar container into your deployment or statefulset.
 Download [k10tools](https://github.com/kastenhq/external-tools/releases) and execute
