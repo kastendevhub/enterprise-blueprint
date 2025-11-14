@@ -59,14 +59,32 @@ oc adm policy add-scc-to-group <your-scc>-gsb system:serviceaccounts:$namespace 
 ```
 
 
-# Inject 
+# Inject
 
-We need to inject the kanister-sidecar container into our deployment.
+Find out all the pods attached to the pvc 
+```
+oc describe pvc <pvc-name> -n <namespace-name>
+```
+
+At the end of the output you'll find the list of pods used by this pvc 
+```
+Used By:       basic-app-deployment-84579bf967-6bm9n
+```
+
+
+We need to inject the kanister-sidecar container into your deployment or statefulset.
 Download [k10tools](https://github.com/kastenhq/external-tools/releases) and execute
 
 ```
-./k10tools k10genericbackup inject <your deployment> -n <your namespace>
+./k10tools k10genericbackup inject deployment <your deployment> -n <your namespace>
 ```
+
+or 
+
+```
+./k10tools k10genericbackup inject statefulset <your statefulset> -n <your namespace>
+```
+
 
 You should get this output 
 ```
