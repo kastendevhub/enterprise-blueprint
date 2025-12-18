@@ -61,7 +61,6 @@ actions:
               app: mongoce-backup
           spec:
             securityContext: 
-              runAsNonRoot: true 
               seccompProfile: 
                 type: "RuntimeDefault"            
               capabilities:
@@ -213,7 +212,6 @@ actions:
               app: mongoce-backup
           spec:
             securityContext: 
-              runAsNonRoot: true 
               seccompProfile: 
                 type: "RuntimeDefault"            
               capabilities:
