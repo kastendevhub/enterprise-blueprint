@@ -63,8 +63,7 @@ actions:
             securityContext: 
               runAsNonRoot: true 
               seccompProfile: 
-                type: "RuntimeDefault"
-            securityContext:
+                type: "RuntimeDefault"            
               capabilities:
                 drop:
                   - MKNOD
@@ -216,8 +215,7 @@ actions:
             securityContext: 
               runAsNonRoot: true 
               seccompProfile: 
-                type: "RuntimeDefault"
-            securityContext:
+                type: "RuntimeDefault"            
               capabilities:
                 drop:
                   - MKNOD
