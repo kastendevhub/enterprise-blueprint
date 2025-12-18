@@ -133,7 +133,7 @@ actions:
           - pipefail
           - -c
           - |
-            sleep 180
+            # sleep 180
             # TODO this may be autodiscovered ? 
             MAS_INSTANCE_ID="{{ .Phases.backupDiscovery.Output.mas_instance_id }}"
             echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_core"
