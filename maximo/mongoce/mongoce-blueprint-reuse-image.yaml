@@ -61,22 +61,19 @@ actions:
               app: mongoce-backup
           spec:
             securityContext: 
-              seccompProfile: 
-                type: "RuntimeDefault"            
-              capabilities:
-                drop:
-                  - MKNOD
-              readOnlyRootFilesystem: true
-              allowPrivilegeEscalation: false
+              runAsUser: 2000
+              runAsNonRoot: true
+              fsGroup: 2000
             containers:
             - name: mongoce-backup
               image: {{ .Phases.backupDiscovery.Output.image }}
               command: ["/bin/bash", "-c", "while true; do sleep 30; done"]
               securityContext:
                 allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
                 capabilities:
                   drop:
-                  - ALL                
+                  - MKNOD                
               env:
               - name: MONGO_ADMIN_PASSWORD
                 valueFrom:
@@ -212,22 +209,19 @@ actions:
               app: mongoce-backup
           spec:
             securityContext: 
-              seccompProfile: 
-                type: "RuntimeDefault"            
-              capabilities:
-                drop:
-                  - MKNOD
-              readOnlyRootFilesystem: true
-              allowPrivilegeEscalation: false
+              runAsUser: 2000
+              runAsNonRoot: true
+              fsGroup: 2000
             containers:
             - name: mongoce-backup
               image: {{ .Phases.restoreDiscovery.Output.image }}
               command: ["/bin/bash", "-c", "while true; do sleep 30; done"]
               securityContext:
                 allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
                 capabilities:
                   drop:
-                  - ALL                
+                  - MKNOD           
               env:
               - name: MONGO_ADMIN_PASSWORD
                 valueFrom:
