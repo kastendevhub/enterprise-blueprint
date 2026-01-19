@@ -305,12 +305,20 @@ actions:
               MAS_INSTANCE_ID=$(echo "$MAS_INSTANCE_ID" | xargs)
               
               echo "Starting restore for mas_${MAS_INSTANCE_ID}_core"
-              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive --drop
-              echo "Completed restore for mas_${MAS_INSTANCE_ID}_core"
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive --drop --noIndexRestore
+              echo "Completed restore for mas_${MAS_INSTANCE_ID}_core (data only, indexes will be recreated)"
               
               echo "Starting restore for mas_${MAS_INSTANCE_ID}_catalog"
-              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive --drop
-              echo "Completed restore for mas_${MAS_INSTANCE_ID}_catalog"
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive --drop --noIndexRestore
+              echo "Completed restore for mas_${MAS_INSTANCE_ID}_catalog (data only, indexes will be recreated)"
+              
+              echo "Recreating indexes for mas_${MAS_INSTANCE_ID}_core"
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive --nsInclude="mas_${MAS_INSTANCE_ID}_core.*" --convertLegacyIndexes
+              echo "Completed index recreation for mas_${MAS_INSTANCE_ID}_core"
+              
+              echo "Recreating indexes for mas_${MAS_INSTANCE_ID}_catalog"
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive --nsInclude="mas_${MAS_INSTANCE_ID}_catalog.*" --convertLegacyIndexes
+              echo "Completed index recreation for mas_${MAS_INSTANCE_ID}_catalog"
             done
     # clean up
     - func: KubeOps
