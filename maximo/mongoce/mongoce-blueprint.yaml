@@ -1,6 +1,3 @@
-# This blueprint performs backup and restore of MongoDB used by Maximo Application Suite (MAS) deployed with the MongoCE operator.
-# it use the image mongo:6.0 for backup and restore operations and create a pvc for temporary storage of the dumps
-# we do not force the uid and gid letting openshift define them
 apiVersion: cr.kanister.io/v1alpha1
 kind: Blueprint
 metadata:
@@ -39,6 +36,11 @@ actions:
           # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
           mas_instance_id=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
           kando output mas_instance_id $mas_instance_id
+
+          # if the pod and the pvc are already there, delete them to start fresh
+          kubectl delete pod mongoce-backup -n $NAMESPACE --ignore-not-found=true
+          kubectl delete pvc mongoce-backup-pvc -n $NAMESPACE --ignore-not-found=true
+          
     - func: KubeOps
       name: createMongoBackupPod
       args:
@@ -64,20 +66,16 @@ actions:
               app: mongoce-backup
           spec:
             securityContext: 
-              runAsNonRoot: true 
-              seccompProfile: 
-                type: "RuntimeDefault"
-              capabilities:
-                drop:
-                  - MKNOD
-              readOnlyRootFilesystem: true
-              allowPrivilegeEscalation: false
+              runAsUser: 2000
+              runAsNonRoot: true
+              fsGroup: 2000
             containers:
             - name: mongoce-backup
               image: mongo:6.0
               command: ["/bin/bash", "-c", "while true; do sleep 30; done"]
               securityContext:
                 allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
                 capabilities:
                   drop:
                   - ALL                
@@ -226,23 +224,19 @@ actions:
               app: mongoce-backup
           spec:
             securityContext: 
-              runAsNonRoot: true 
-              seccompProfile: 
-                type: "RuntimeDefault"
-              capabilities:
-                drop:
-                  - MKNOD
-              readOnlyRootFilesystem: true
-              allowPrivilegeEscalation: false
+              runAsUser: 2000
+              runAsNonRoot: true
+              fsGroup: 2000
             containers:
             - name: mongoce-backup
               image: mongo:6.0
               command: ["/bin/bash", "-c", "while true; do sleep 30; done"]
               securityContext:
                 allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
                 capabilities:
                   drop:
-                  - ALL                
+                  - ALL           
               env:
               - name: MONGO_ADMIN_PASSWORD
                 valueFrom:
