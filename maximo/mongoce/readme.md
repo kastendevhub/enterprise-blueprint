@@ -37,7 +37,7 @@ Notice that by using the `--uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo
 
 Once you finished your tests delete the pod and its pvc 
 ```
-oc delete -f mongoce-backup.yaml
+oc delete -f mongoce-backup.yaml -n mongoce
 ``` 
 
 # Install and execute the blueprint 
