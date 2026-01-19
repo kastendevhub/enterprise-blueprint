@@ -69,6 +69,13 @@ we need to find a way to discover the MAS_INSTANCE_ID, always make sure you crea
 oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
 ```
 
+You can use a comma separated list if you have multiple environment
+```
+oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev,masprod,masuat
+```
+
+This allow granular restore per environment if needed. 
+
 Then deploy the blueprint
 
 ```
