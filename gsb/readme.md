@@ -178,6 +178,17 @@ It is also possible to use helm `--set option`
 --set genericStorageBackup.token=<Generated GSB Activation Token>
 --set genericStorageBackup.overridepubkey=<Staging Public Key>
 ```
+# uninject 
+
+If you don't want anymore to inject the deployment or statefulset you can uninject 
+
+
+```
+./k10tools k10genericbackup uninject deployment <your deployment> -n <your namespace>
+```
+
+This is also documented in the [k10 documentation](https://docs.kasten.io/latest/operating/k10tools#veeam-kasten-generic-storage-backup-sidecar-injection).
+
 
 # create a policy 
 
