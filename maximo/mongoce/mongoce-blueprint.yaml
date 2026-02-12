@@ -306,16 +306,20 @@ actions:
             for MAS_INSTANCE_ID in "${INSTANCE_ARRAY[@]}"; do
               # Trim whitespace
               MAS_INSTANCE_ID=$(echo "$MAS_INSTANCE_ID" | xargs)
+              echo "Backing up the OauthClient collection in database mas_${MAS_INSTANCE_ID}_core as it contains client secrets that should not be overwritten during restore"
+              mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core_oauthclient.archive -d mas_${MAS_INSTANCE_ID}_core --collection OauthClient
+                            
+              echo "Dropping database mas_${MAS_INSTANCE_ID}_core before restore"
+              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_core').dropDatabase()" 
+
+              echo "Starting restore for mas_${MAS_INSTANCE_ID}_core except OauthClient collection"
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive  --nsExclude=mas_${MAS_INSTANCE_ID}_core.OauthClient
               
-              echo "Dropping database mas_${MAS_INSTANCE_ID}_core before restore (if exists)"
-              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_core').dropDatabase()" || true
+              echo "Restoring OauthClient collection for mas_${MAS_INSTANCE_ID}_core from the previously backed up oauthclient collection"
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core_oauthclient.archive  
               
-              echo "Starting restore for mas_${MAS_INSTANCE_ID}_core"
-              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive
-              echo "Completed restore for mas_${MAS_INSTANCE_ID}_core"
-              
-              echo "Dropping database mas_${MAS_INSTANCE_ID}_catalog before restore (if exists)"
-              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_catalog').dropDatabase()" || true
+              echo "Dropping database mas_${MAS_INSTANCE_ID}_catalog before restore"
+              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_catalog').dropDatabase()"
               
               echo "Starting restore for mas_${MAS_INSTANCE_ID}_catalog"
               mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive
