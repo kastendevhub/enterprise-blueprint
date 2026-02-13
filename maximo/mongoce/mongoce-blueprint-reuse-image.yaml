@@ -33,7 +33,11 @@ actions:
 
           # we need to find a way to discover the MAS_INSTANCE_ID
           # always make sure you created the configmap mas-instance-id in the mongoce namespace
-          # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
+          # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=dev
+          if [ -z "$(kubectl get configmap -n $NAMESPACE mas-instance-id --ignore-not-found=true)" ]; then
+            echo "configmap mas-instance-id not found in namespace $NAMESPACE, please create it with the MAS_INSTANCE_ID (e.g., oc create configmap -n $NAMESPACE mas-instance-id --from-literal mas-instance-id=dev)"
+            exit 1
+          fi
           mas_instance_id=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
           kando output mas_instance_id $mas_instance_id
 
@@ -138,6 +142,9 @@ actions:
           - pipefail
           - -c
           - |
+            NAMESPACE={{ .Namespace.Name }}
+            cd /k10-dumps/mongoce
+
             # MAS_INSTANCE_ID can be a comma-separated list (e.g., "sbx,uat,prod")
             MAS_INSTANCE_IDS="{{ .Phases.backupDiscovery.Output.mas_instance_id }}"
             
@@ -150,11 +157,11 @@ actions:
               MAS_INSTANCE_ID=$(echo "$MAS_INSTANCE_ID" | xargs)
               
               echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_core"
-              mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
+              mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
               echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_core"
               
               echo "Starting mongodump for mas_${MAS_INSTANCE_ID}_catalog"
-              mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive -d mas_${MAS_INSTANCE_ID}_catalog
+              mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive -d mas_${MAS_INSTANCE_ID}_catalog
               echo "Completed mongodump for mas_${MAS_INSTANCE_ID}_catalog"
             done
   
@@ -206,7 +213,11 @@ actions:
 
           # we need to find a way to discover the MAS_INSTANCE_ID
           # always make sure you created the configmap mas-instance-id in the mongoce namespace
-          # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
+          # oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=dev
+          if [ -z "$(kubectl get configmap -n $NAMESPACE mas-instance-id --ignore-not-found=true)" ]; then
+            echo "configmap mas-instance-id not found in namespace $NAMESPACE, please create it with the MAS_INSTANCE_ID (e.g., oc create configmap -n $NAMESPACE mas-instance-id --from-literal mas-instance-id=dev)"
+            exit 1
+          fi
           mas_instance_id=$(kubectl get configmap -n $NAMESPACE mas-instance-id -o jsonpath='{.data.mas-instance-id}')
           kando output mas_instance_id $mas_instance_id
     # we don't need to recreate pvc as it is restored by kasten, the pod need to be recreated with the key that may have changed on another cluster or another time
@@ -296,6 +307,9 @@ actions:
           - pipefail
           - -c
           - |
+            NAMESPACE={{ .Namespace.Name }}
+            cd /k10-dumps/mongoce
+
             # MAS_INSTANCE_ID can be a comma-separated list (e.g., "sbx,uat,prod")
             MAS_INSTANCE_IDS="{{ .Phases.restoreDiscovery.Output.mas_instance_id }}"
             
@@ -307,22 +321,22 @@ actions:
               # Trim whitespace
               MAS_INSTANCE_ID=$(echo "$MAS_INSTANCE_ID" | xargs)
               echo "Backing up the OauthClient collection in database mas_${MAS_INSTANCE_ID}_core as it contains client secrets that should not be overwritten during restore"
-              mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core_oauthclient.archive -d mas_${MAS_INSTANCE_ID}_core --collection OauthClient
+              mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core_oauthclient.archive -d mas_${MAS_INSTANCE_ID}_core --collection OauthClient
                             
               echo "Dropping database mas_${MAS_INSTANCE_ID}_core before restore"
-              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_core').dropDatabase()" 
+              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_core').dropDatabase()" 
 
               echo "Starting restore for mas_${MAS_INSTANCE_ID}_core except OauthClient collection"
-              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive  --nsExclude=mas_${MAS_INSTANCE_ID}_core.OauthClient
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core.archive  --nsExclude=mas_${MAS_INSTANCE_ID}_core.OauthClient
               
               echo "Restoring OauthClient collection for mas_${MAS_INSTANCE_ID}_core from the previously backed up oauthclient collection"
-              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core_oauthclient.archive  
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_core_oauthclient.archive  
               
               echo "Dropping database mas_${MAS_INSTANCE_ID}_catalog before restore"
-              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_catalog').dropDatabase()"
+              mongosh "mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --tls --tlsCAFile /var/lib/tls/ca/ca.crt --eval "db.getSiblingDB('mas_${MAS_INSTANCE_ID}_catalog').dropDatabase()"
               
               echo "Starting restore for mas_${MAS_INSTANCE_ID}_catalog"
-              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive
+              mongorestore --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.$NAMESPACE.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/k10-dumps/mongoce/mas_${MAS_INSTANCE_ID}_catalog.archive
               echo "Completed restore for mas_${MAS_INSTANCE_ID}_catalog"
             done
     # clean up
