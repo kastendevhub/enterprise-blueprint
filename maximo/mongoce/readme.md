@@ -26,7 +26,7 @@ oc exec -n mongoce -it mongoce-backup -- bash
 # in the pod create the dump of mas_{MAS_INSTANCE_ID}_core and mas_{MAS_INSTANCE_ID}_catalog
 
 #adapt to your situation
-MAS_INSTANCE_ID="masdev"
+MAS_INSTANCE_ID="dev"
 
 mongodump --uri="mongodb://admin:$MONGO_ADMIN_PASSWORD@mas-mongo-ce-0.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-1.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017,mas-mongo-ce-2.mas-mongo-ce-svc.mongoce.svc.cluster.local:27017/?replicaSet=mas-mongo-ce&tls=true&authSource=admin" --sslCAFile=/var/lib/tls/ca/ca.crt --archive=/data/mongo/dumps/mas_${MAS_INSTANCE_ID}_core.archive -d mas_${MAS_INSTANCE_ID}_core
 
@@ -66,12 +66,12 @@ If you need to add docker pull secret to the global openshift check the [documen
 we need to find a way to discover the MAS_INSTANCE_ID, always make sure you created the configmap mas-instance-id in the mongoce namespace
 
 ```
-oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev
+oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=dev
 ```
 
 You can use a comma separated list if you have multiple environment
 ```
-oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=masdev,masprod,masuat
+oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=dev,prod,uat
 ```
 
 This allow granular restore per environment if needed. 

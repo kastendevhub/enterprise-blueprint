@@ -163,6 +163,7 @@ db.dummy.insertOne({test: "catalog"})
 // Create mas_dev_core with a dummy collection
 use mas_dev_core
 db.dummy.insertOne({test: "core"})
+db.OauthClient.insertOne({test: "oauthclient"})
 ```
 
 Verify 
