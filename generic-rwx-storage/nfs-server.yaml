@@ -19,7 +19,10 @@ spec:
     spec:      
       containers:
       - name: nfs-server
-        image: k8s.gcr.io/volume-nfs:0.8
+        image: itsthenetwork/nfs-server-alpine:latest
+        env:
+        - name: SHARED_DIRECTORY
+          value: /exports
         ports:
         - name: nfs
           containerPort: 2049
@@ -28,7 +31,10 @@ spec:
         - name: rpcbind
           containerPort: 111
         securityContext:
-          privileged: true
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - SETPCAP
         volumeMounts:
         - name: storage
           mountPath: /exports
