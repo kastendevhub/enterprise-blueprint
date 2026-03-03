@@ -1,12 +1,12 @@
 # Goal
 
-Explain how the namespace `mas-$MAS_INSTANCE_ID-manage` should be backe up
+Explain how the namespace `mas-$MAS_INSTANCE_ID-manage` should be backed up
 
 # Backup 
 
 Create a policy that backup the whole namespace. 
 
-The PVC are Read Write Many and with some storage provider like Azure, Oracle there is no support for snapshot. You'll have to use [Generic Storage Backup](../../../gsb/). You'll have to do sidecar injection in all the deployment using this pvc : use oc describe <pvc> to find all the pods using this pvc.
+The PVC are Read Write Many and with some storage provider there is no support for snapshot. You'll have to use [Generic Storage Backup](../../../gsb/). You'll have to do sidecar injection in all the deployment using this pvc : use oc describe <pvc> to find all the pods using this pvc.
 
 If the PVC are CephFS you'll have to use [Shallow volume configuration](../../../ceph/cephfs/)
 
