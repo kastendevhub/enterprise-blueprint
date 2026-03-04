@@ -6,18 +6,18 @@ Explain how the namespace `mas-$MAS_INSTANCE_ID-manage` should be backed up
 
 Create a policy that backup the whole namespace. 
 
-If the PVC support CSI snapshot just backup as usual.
+If the PVCs support CSI snapshots just backup as usual.
 
 If the PVC are CephFS you'll have to use [Shallow volume configuration](../../../ceph/cephfs/)
 
-## If the PVCs does not support CSI snapshots 
+## If the PVCs do not support CSI snapshots
 
 We do not encourage the use of [Generic Storage Backup](../../../gsb/) because: 
 
     - Sidecar injection must be done on a lot of workloads and it's difficult to maintain, 
       maintaining all the deployment injection is a daunting task
     - GSB on openshift always create security challenges and [proper setting must be engaged](../../../gsb/)
-    - Once you have injected the container any update of Kasten will require that you ugrade all the injected containers
+    - Once you have injected the container any update of Kasten will require that you upgrade all the injected containers
     - You may have to review request and limit for your pods now that they embed the data mover container
 
 Instead exclude all the PVCs in the policy and use VBR (Veeam Backup and Replication) to treat the files share as a NAS. For instance in this [knowledge base](https://www.veeam.com/kb4011) you'll see how to configure VBR to backup azure file shares.
@@ -28,13 +28,13 @@ you know in which VBR backup you need to restore the files. You can easily save 
  
 # Restore
 
-You can granulary restore manifest from a restore point. 
+You can granularly restore manifest from a restore point. 
 
 ## If you backup the files with Kasten
 
-You can granulary restore a file or a whole filesystem using [File Recovery session](https://docs.kasten.io/latest/usage/restorefiles/#filerecoverysession-example). You can use this [helper script](https://github.com/michaelcourcy/kasten-calibrate/blob/main/explorer.md) to create a file recovery session pod that attached the pvc you want to restore.
+You can granularly restore a file or a whole filesystem using [File Recovery session](https://docs.kasten.io/latest/usage/restorefiles/#filerecoverysession-example). You can use this [helper script](https://github.com/michaelcourcy/kasten-calibrate/blob/main/explorer.md) to create a file recovery session pod that attaches the PVC you want to restore.
 
-Directly restoring a PVC is complex because you need to scale down all the deployment to release the PVCs, but those 
+Directly restoring a PVC is complex because you need to scale down all the deployments to release the PVCs, but those 
 deployments are controlled by all the maximo operator controller and this is a daunting task to stop all the reconcile process. The best 
 approach we tested for the moment is the file level recovery.
 
