@@ -13,6 +13,7 @@ If the PVC are CephFS you'll have to use [Shallow volume configuration](../../..
 ## If the PVCs does not support CSI snapshots 
 
 We do not encourage the use of [Generic Storage Backup](../../../gsb/) because: 
+
     - Sidecar injection must be done on a lot of workloads and it's difficult to maintain, 
       maintaining all the deployment injection is a daunting task
     - GSB on openshift always create security challenges and [proper setting must be engaged](../../../gsb/)
