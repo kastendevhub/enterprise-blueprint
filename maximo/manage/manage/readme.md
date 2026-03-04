@@ -6,38 +6,59 @@ Explain how the namespace `mas-$MAS_INSTANCE_ID-manage` should be backed up
 
 Create a policy that backup the whole namespace. 
 
-The PVC are Read Write Many and with some storage provider there is no support for snapshot. You'll have to use [Generic Storage Backup](../../../gsb/). You'll have to do sidecar injection in all the deployment using this pvc : use oc describe <pvc> to find all the pods using this pvc.
+If the PVC support CSI snapshot just backup as usual.
 
 If the PVC are CephFS you'll have to use [Shallow volume configuration](../../../ceph/cephfs/)
 
+## If the PVCs does not support CSI snapshots 
+
+We do not encourage the use of [Generic Storage Backup](../../../gsb/) because: 
+    - Sidecar injection must be done on a lot of workloads and it's difficult to maintain, 
+      maintaining all the deployment injection is a daunting task
+    - GSB on openshift always create security challenges and [proper setting must be engaged](../../../gsb/)
+    - Once you have injected the container any update of Kasten will require that you ugrade all the injected containers
+    - You may have to review request and limit for your pods now that they embed the data mover container
+
+Instead exclude all the PVCs in the policy and use VBR (Veeam Backup and Replication) to treat the files share as a NAS. For instance in this [knowledge base](https://www.veeam.com/kb4011) you'll see how to configure VBR to backup azure file shares.
+
+If you use VBR however you need to map the name of the physical volume with the name of the PVC in the maximo namespace so that 
+you know in which VBR backup you need to restore the files. You can easily save this info in a config map before you start a backup using the 
+[pvc-info blueprint](https://github.com/michaelcourcy/kasten-claude/tree/main/pvc-info).
+ 
 # Restore
 
+You can granulary restore manifest from a restore point. 
 
-You can granulary restore manifest from a restore point. But restoring the whole namespace is not supported. If you need to recover from a complete DR check the DR section
+## If you backup the files with Kasten
 
-You can granulary restore a file using a [File Recovery session](https://docs.kasten.io/latest/usage/restorefiles/#filerecoverysession-example). 
+You can granulary restore a file or a whole filesystem using [File Recovery session](https://docs.kasten.io/latest/usage/restorefiles/#filerecoverysession-example). You can use this [helper script](https://github.com/michaelcourcy/kasten-calibrate/blob/main/explorer.md) to create a file recovery session pod that attached the pvc you want to restore.
+
+Directly restoring a PVC is complex because you need to scale down all the deployment to release the PVCs, but those 
+deployments are controlled by all the maximo operator controller and this is a daunting task to stop all the reconcile process. The best 
+approach we tested for the moment is the file level recovery.
+
+## If you backup the files with VBR 
+
+You can restore directly using VBR.
+
+For instance if you want to restore doclinks from a source cluster to the DR cluster 
+
+| Cluster | PVC | PV |
+|---|---|---|
+| Source | instance1-workspace1-doclinks | pvc-75de996e-552d-417c-bae3-9ca922f573e2 |
+| Disaster | instance1-workspace1-doclinks | pvc-4f057762-7acb-4713-ba16-199ab69c90ea |
+
+You can use VBR to copy the content of the pvc-75de996e-552d-417c-bae3-9ca922f573e2 *backup* into the  pvc-4f057762-7acb-4713-ba16-199ab69c90ea *share*.
+
+You can obtain the mapping between the source PVC / Source PV by reading the config map created by the [pvc-info blueprint](https://github.com/michaelcourcy/kasten-claude/tree/main/pvc-info).
+
+# If you use S3 or Azure blob storage for your files 
+
+TODO : identify in which resource the S3 or azure storage is defined and restore it.
 
 
-If you need to restore the whole PVC you need to make sure that kasten and the maximo operator are not going to compete on scaling the deployments before deleting and recreating the pvc. 
-
-```
-oc describe pvc instance1-workspace1-doclinks
-Used By:       instance1-workspace1-cron-64594dcbdc-nqphn
-               instance1-workspace1-foundation-85bd778464-tvhbp
-               instance1-workspace1-manage-maxinst-5bdbc7d47-68qt7
-               instance1-workspace1-mea-5d5f7f95d-fz8jf
-               instance1-workspace1-rpt-7797ccf69d-lcm7z
-               instance1-workspace1-ui-5bdb4b98ff-qfg44
-```
-
-We could not find a way to scale down all the deployments because they are controlled by maximo operator (this will probably change soon), so for the moment we use volume clone restore and create a pod that attach both the volume clone restore and the orriginal volume then we proceed the copy inside the pod.
-
-We then delete the pod and the volume clone restore.
 
 
-# Disaster Recovery 
-
-Disaster recovery is covered in another section.
 
 
 
