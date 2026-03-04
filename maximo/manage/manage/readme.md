@@ -53,6 +53,8 @@ You can use VBR to copy the content of the pvc-75de996e-552d-417c-bae3-9ca922f57
 
 You can obtain the mapping between the source PVC / Source PV by reading the config map created by the [pvc-info blueprint](https://github.com/michaelcourcy/kasten-claude/tree/main/pvc-info).
 
+The DR use case is not the most frequent and usually you want to restore granulary a file from the pvc-75de996e-552d-417c-bae3-9ca922f573e2 *backup* to the pvc-75de996e-552d-417c-bae3-9ca922f573e2 *share*. 
+
 # If you use S3 or Azure blob storage for your files 
 
 TODO : identify in which resource the S3 or azure storage is defined and restore it.
