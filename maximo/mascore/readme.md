@@ -2,9 +2,9 @@
 
 Explain how the namespace `mas-$MAS_INSTANCE_ID-manage` should be backed up
 
-# A simgle backup policy 
+# A single backup policy 
 
-you need to create a policy that will capture this list of namespaces
+You need to create a policy that will capture this list of namespaces
 
 - mas-$MAS_INSTANCE_ID-manage
 - cert-manager
@@ -12,8 +12,8 @@ you need to create a policy that will capture this list of namespaces
 - ibm-sls 
 - grafana
 
-Those backup are very useful for retreiving manifest that has been changed either direcly with 
-kubectl or by action on the UI. You often use them for comparison, or fixing manipulation errors.
+These backups are very useful for retrieving manifests that have been changed either directly with
+kubectl or by action on the UI. You often use them for comparison or to fix manipulation errors.
 
 The Grafana PVC stores the Grafana database (SQLite by default), which contains:
 
