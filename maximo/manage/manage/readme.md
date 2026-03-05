@@ -20,7 +20,7 @@ We do not encourage the use of [Generic Storage Backup](../../../gsb/) because:
     - Once you have injected the container any update of Kasten will require that you upgrade all the injected containers
     - You may have to review request and limit for your pods now that they embed the data mover container
 
-Instead exclude all the PVCs in the policy and use VBR (Veeam Backup and Replication) to treat the files share as a NAS. For instance in this [knowledge base](https://www.veeam.com/kb4011) you'll see how to configure VBR to backup azure file shares.
+Instead exclude all the PVCs in the policy and use VBR (Veeam Backup and Replication) to treat the files share as a NAS. For instance in this [knowledge base](https://www.veeam.com/kb4011) you'll see how to configure VBR to backup azure file shares. We also provide a [detailed guide](./VBR_Azurefileshare_Kub.pdf) for step by step configuration for azure file share.
 
 If you use VBR however you need to map the name of the physical volume with the name of the PVC in the maximo namespace so that 
 you know in which VBR backup you need to restore the files. You can easily save this info in a config map before you start a backup using the 
