@@ -57,7 +57,7 @@ The DR use case is not the most frequent and usually you want to restore granula
 
 # If you use S3 or Azure blob storage for your files 
 
-TODO : identify in which resource the S3 or azure storage is defined and restore it.
+The configuration of your s3 or azure blob storage is saved in the manage database, as soon as you restore it Manage will reconnect to this object storage.
 
 
 

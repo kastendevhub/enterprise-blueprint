@@ -27,3 +27,7 @@ In this enterprise blueprint we only support the 3 first components
 - [Maximo Manage](./manage/)
 
 But we'll include the rest in the future depending of our availability and customer requests.
+
+# Full DR 
+
+If you need to execute a full DR follow this [documentation](./full-dr.md) 

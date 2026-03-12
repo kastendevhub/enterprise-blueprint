@@ -94,17 +94,29 @@ oc scale sts ${ETCD_STS} --replicas=0
 oc scale deploy ${LDAP_DEP} --replicas=0
 ```
 
-oc get pvc|awk '{print $1}'
-NAME
-activelogs-c-mas-masdev-masdev-manage-db2u-0
-c-mas-masdev-masdev-manage-backup
-c-mas-masdev-masdev-manage-meta
-data-c-mas-masdev-masdev-manage-db2u-0
-tempts-c-mas-masdev-masdev-manage-db2u-0
+Make sure all pods are fully terminated before proceeding — PVCs cannot be replaced while they are still mounted. Only the 2 operator pods should remain:
+```
+oc get pods -w
+```
 
-Make sure that except the 2 operator pods all the pods are deleted, if there is pod in completed state delete them because they are still attached to the PVCs. 
+Delete any pods in `Completed` state as they also hold PVC attachments:
+```
+oc get pods --field-selector=status.phase==Succeeded -o name | xargs oc delete
+```
 
-**Now use Kasten to replace only the PVC**
+The PVCs to restore are:
+
+| PVC | Role |
+|---|---|
+| `data-c-mas-masdev-masdev-manage-db2u-0` | Database data files (encrypted) |
+| `c-mas-masdev-masdev-manage-meta` | Keystore (`keystore.p12` + `keystore.sth`) |
+| `activelogs-c-mas-masdev-masdev-manage-db2u-0` | Active transaction logs |
+| `c-mas-masdev-masdev-manage-backup` | Db2 native backup storage |
+| `tempts-c-mas-masdev-masdev-manage-db2u-0` | Temporary tablespace |
+
+> **Important:** `data` and `meta` PVCs are inseparable — the data PVC is encrypted with the key stored in the meta PVC. Always restore them from the same restore point, otherwise Db2 will fail to decrypt the database files.
+
+**Now use Kasten to restore all PVCs from the same restore point**
 
 Scale up the workload
 ```
@@ -123,13 +135,19 @@ db2u-day2-ops-controller-manager-5bdcbfd869-vtl6w   1/1     Running   0         
 db2u-operator-manager-fdc864bd7-9nv59               1/1     Running   0          6d7h
 ```
 
-Bring the database out of write-suspend after restoring:
+Bring the database out of write-suspend after restoring. The PVC snapshot was taken while the database was in write-suspend (via `manage_snapshots --action suspend`); this command releases that state:
 ```
 CATALOG_POD=$(oc get po -l name=dashmpp-head-0,app=${DB2U_CLUSTER} --no-headers | awk '{print $1}'); echo $CATALOG_POD
 oc exec -it ${CATALOG_POD} -- manage_snapshots --action restore
 ```
 
-Restart operator reconciliation 
+Restart operator reconciliation:
 ```
 oc annotate db2ucluster $DB2U_CLUSTER db2u.databases.ibm.com/maintenance-pause-reconcile- --overwrite
+```
+
+Verify the database is healthy:
+```
+oc exec -it ${CATALOG_POD} -- db2 connect to bludb
+oc exec -it ${CATALOG_POD} -- db2 "select count(*) from syscat.tables"
 ```
