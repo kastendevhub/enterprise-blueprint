@@ -48,7 +48,7 @@ Crypto key are used to encrypt sensible information and in order to restore the 
 
 You'll find this secret in the manage restorepoint of the previous cluster.
 
- Once this secret has been restored restart the pod <instance>-<workspace>-manage-maxinst-xxxxxx-yyyyy that will update the the old field.
+ Once this secret has been restored restart the pod `<instance>-<workspace>-manage-maxinst-xxxxxx-yyyyy` that will update the the old field.
 
 Check in the container the old field has been updated by checking the file "/opt/IBM/SMP/maximo/applications/maximo/properties/maximo.properties"
 
