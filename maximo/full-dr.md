@@ -36,7 +36,6 @@ Follow the restore proecedure describe in the [mongoce](./mongoce/)
 
 If you're using DB2U (built in database for manage) follow the [DB2U restore guide](./manage/db2u/readme.md#restoring-db2)
 
-If you're using an external database you 
 
 ## 3. Restore crypto key 
 
@@ -54,10 +53,6 @@ You'll find this secret in the manage restorepoint of the previous cluster.
 Check in the container the old field has been updated by checking the file "/opt/IBM/SMP/maximo/applications/maximo/properties/maximo.properties"
 
 ![Inside the manage-maxinst container](./manage-maxinst.png)
-
-## Restore the manage database 
-
-If you use DB2U follow the [restore guide](./manage/db2u/readme.md#restoring-db2). 
 
 ## Restoring attachments 
 
