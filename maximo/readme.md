@@ -26,7 +26,7 @@ In this enterprise blueprint we only support the 3 first components
 - [Maximo Application Suite Core](./mascore/)
 - [Maximo Manage](./manage/)
 
-But we'll include the rest in the future depending of our availability and customer requests.
+But we'll include the rest in the future depending of our customer requests.
 
 # Full DR 
 
