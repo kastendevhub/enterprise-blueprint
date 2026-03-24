@@ -18,7 +18,7 @@ In order to validate the blueprint execute the following command
 ```
 # adapt the name of the pod to your environment
 oc exec -n db2u -it c-mas-masdev-masdev-manage-db2u-0 -- /bin/sh
-manage_snapshots --action su spend
+manage_snapshots --action suspend
 # confirm HA monitoring is disabled 
 wvcli system status
 
@@ -138,7 +138,7 @@ db2u-operator-manager-fdc864bd7-9nv59               1/1     Running   0         
 Bring the database out of write-suspend after restoring. The PVC snapshot was taken while the database was in write-suspend (via `manage_snapshots --action suspend`); this command releases that state:
 ```
 CATALOG_POD=$(oc get po -l name=dashmpp-head-0,app=${DB2U_CLUSTER} --no-headers | awk '{print $1}'); echo $CATALOG_POD
-oc exec -it ${CATALOG_POD} -- manage_snapshots --action restore
+oc exec -it ${CATALOG_POD} -- manage_snapshots --action resume
 ```
 
 Restart operator reconciliation:
