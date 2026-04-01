@@ -35,8 +35,8 @@ oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
 
 Then restore with "overwrite existing" and unselect the pod resource if it is present in the restore point. 
 
-If you manage the backup of the PVCs with VBR the PVCs are already excluded form the restore point, and those PVCs won't be recreated by Kasten, but the restoration of the files 
-inside are needed should be handled with VBR.
+If you manage the backup of the PVCs with VBR the PVCs are already excluded form the restore point, and those PVCs won't be recreated by Kasten. If the restoration of the files 
+inside those PVCs are needed they should be handled with VBR.
 
 # If you use S3 or Azure blob storage for your files 
 
