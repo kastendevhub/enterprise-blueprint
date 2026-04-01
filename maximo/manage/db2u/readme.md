@@ -74,7 +74,12 @@ Run once the policy to check there is no error during backup.
 
 ## Restoring db2 
 
-We follow this steps in IBM documentation [using container commands - Db2uInstance](https://www.ibm.com/docs/en/db2/11.5.x?topic=restores-using-container-commands-db2ucluster).
+Scale down all the deployments in the manage namespace 
+```
+oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
+```
+
+Then we follow this steps in IBM documentation [using container commands - Db2uInstance](https://www.ibm.com/docs/en/db2/11.5.x?topic=restores-using-container-commands-db2ucluster).
 
 Suspend reconciliation with the operator
 
@@ -150,4 +155,9 @@ Verify the database is healthy:
 ```
 oc exec -it ${CATALOG_POD} -- db2 connect to bludb
 oc exec -it ${CATALOG_POD} -- db2 "select count(*) from syscat.tables"
+```
+
+Scale up all the deployments in the manage namespace 
+```
+oc scale --replicas 1 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
 ```
