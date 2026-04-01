@@ -28,32 +28,15 @@ you know in which VBR backup you need to restore the files. You can easily save 
  
 # Restore
 
-You can granularly restore manifest from a restore point. 
+Scale down all the deployments in the manage namespace 
+```
+oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
+```
 
-## If you backup the files with Kasten
+Then restore with "overwrite existing" and unselect the pod resource if it is present in the restore point. 
 
-You can granularly restore a file or a whole filesystem using [File Recovery session](https://docs.kasten.io/latest/usage/restorefiles/#filerecoverysession-example). You can use this [helper script](https://github.com/michaelcourcy/kasten-calibrate/blob/main/explorer.md) to create a file recovery session pod that attaches the PVC you want to restore.
-
-Directly restoring a PVC is complex because you need to scale down all the deployments to release the PVCs, but those 
-deployments are controlled by all the maximo operator controller and this is a daunting task to stop all the reconcile process. The best 
-approach we tested for the moment is the file level recovery.
-
-## If you backup the files with VBR 
-
-You can restore directly using VBR.
-
-For instance if you want to restore doclinks from a source cluster to the DR cluster 
-
-| Cluster | PVC | PV |
-|---|---|---|
-| Source | instance1-workspace1-doclinks | pvc-75de996e-552d-417c-bae3-9ca922f573e2 |
-| Disaster | instance1-workspace1-doclinks | pvc-4f057762-7acb-4713-ba16-199ab69c90ea |
-
-You can use VBR to copy the content of the pvc-75de996e-552d-417c-bae3-9ca922f573e2 *backup* into the  pvc-4f057762-7acb-4713-ba16-199ab69c90ea *share*.
-
-You can obtain the mapping between the source PVC / Source PV by reading the config map created by the [pvc-info blueprint](https://github.com/michaelcourcy/kasten-claude/tree/main/pvc-info).
-
-The DR use case is not the most frequent and usually you want to restore granulary a file from the pvc-75de996e-552d-417c-bae3-9ca922f573e2 *backup* to the pvc-75de996e-552d-417c-bae3-9ca922f573e2 *share*. 
+If you manage the backup of the PVCs with VBR the PVCs are already excluded form the restore point, and those PVCs won't be recreated by Kasten, but the restoration of the files 
+inside are needed should be handled with VBR.
 
 # If you use S3 or Azure blob storage for your files 
 
