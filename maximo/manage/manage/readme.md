@@ -6,6 +6,11 @@ Explain how the namespace `mas-$MAS_INSTANCE_ID-manage` should be backed up
 
 Create a policy that backs up the whole namespace. 
 
+But you must exclude CertificateRequest: CertificateRequest objects are ephemeral — they're transient objects created by cert-manager to fulfill a Certificate, then typically completed/garbage-collected. They shouldn't be restored at all, they should not be backed up at all. Their webhook rejects any PUT that tries to change spec. K10's overwriteExisting path calls Update (PUT) on all unstructured resources, hitting this webhook validation.
+
+![mas-manage policy](./mas-manage-policy.png.png)
+
+
 If the PVCs support CSI snapshots just backup as usual.
 
 If the PVCs are CephFS you'll have to use [Shallow volume configuration](../../../ceph/cephfs/)
