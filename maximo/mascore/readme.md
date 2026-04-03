@@ -72,9 +72,9 @@ This is important for backup: the Grafana PVC is worth backing up because it hol
 
 ## For mas-${MAS_INSTANCE_ID}-core 
 
-First restore the top object Suite (core.mas.ibm.com.Suite) with "overwrite existing" selected.
+First restore the top object Suite (core.mas.ibm.com.Suite) with "overwrite existing" selected. This will ensure a consistent reconciliation when reconciliation will start.
 
-Then scale down all the deployments 
+But the reconciliation is a long process (involving the rebuild of all the images), in order to get back quickly the application scale down all the deployments 
 ```
 oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-core
 ```
@@ -85,7 +85,8 @@ And restore again, but this time all the resources with "overwrite existing" sel
 
 First restore the top objects LicenseServices (sls.ibm.com.LicenseService) and LicenseClient (sls.ibm.com.LicenseClient) with "overwrite existing" selected.
 
-Then scale down all the deployments 
+This will ensure a consistent reconciliation when reconciliation will start. But the reconciliation is a long process (involving the rebuild of all the images), in order to get back 
+quickly the application scale down all the deployments 
 ```
 oc scale --replicas 0 deployment --all -n ibm-sls
 ```
