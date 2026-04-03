@@ -29,9 +29,9 @@ you know in which VBR backup you need to restore the files. You can easily save 
 
 First restore only the top objects ManageWorkspace, ManageDeployment, ManageBuild  with "overwrite existing". This will ensure a consistent reconciliation when reconciliation will start. 
 
-But the reconciliation is a long process (involving the rebuild of all the images), in order to get back quickly the application
+But the reconciliation is a long process (involving the rebuild of all the images), in order to get back quickly the application 
+scale down all the deployments in the manage namespace 
 
-Scale down all the deployments in the manage namespace 
 ```
 oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
 ```
