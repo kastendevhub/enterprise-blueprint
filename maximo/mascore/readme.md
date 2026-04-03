@@ -12,7 +12,7 @@ You need to create a policy that will capture this list of namespaces
 - ibm-sls 
 - grafana
 
-**But you must exclude CertificateRequest** : CertificateRequest objects are ephemeral — they're transient objects created by cert-manager to fulfill a Certificate, then typically completed/garbage-collected. They shouldn't be restored at all, they should not be backed up at all. their webhook rejects any PUT that tries to change spec. K10's overwriteExisting path calls Update (PUT) on all unstructured resources, hitting this webhook validation.
+**But you must exclude CertificateRequest**: CertificateRequest objects are ephemeral — they're transient objects created by cert-manager to fulfill a Certificate, then typically completed/garbage-collected. They shouldn't be restored at all, they should not be backed up at all. Their webhook rejects any PUT that tries to change spec. K10's overwriteExisting path calls Update (PUT) on all unstructured resources, hitting this webhook validation.
 
 ![alt text](./mas-core-policy.png)
 
@@ -23,11 +23,11 @@ kubectl or by action on the UI. You often use them for comparison or to fix mani
 
 ### Why backing up the mas-$MAS_INSTANCE_ID-core 
 
-This namespace contains a top definition object `core.mas.ibm.com.Suite` object which play an important role in the global configuration of Maximo. 
+This namespace contains a top definition object `core.mas.ibm.com.Suite` object which plays an important role in the global configuration of Maximo. 
 
 It contains also a lot of secrets and `config.mas.ibm.com.jdbccfgs` that must be protected and other derived resources.
 
-A lot of derived resources will be rebuilt after operator reconcilation, but by restoring them directly with Kasten you can get back Maximo working in 7 minutes instead of waiting for the 2.5 hours rebuild.
+A lot of derived resources will be rebuilt after operator reconciliation, but by restoring them directly with Kasten you can get back Maximo working in 7 minutes instead of waiting for the 2.5 hours rebuild.
 
 ### Why backing up cert-manager 
 
@@ -54,7 +54,7 @@ IBM SLS (Suite License Service) is the licensing backbone of Maximo Application 
 
 Without a backup, recovering SLS requires re-creating the entitlement, re-registering the suite, and re-establishing trust — a process that can take significant time and requires access to the original IBM entitlement key.
 
-### Why backing up the grafana5 namespace
+### Why backing up the grafana namespace
 
 The Grafana PVC stores the Grafana database (SQLite by default), which contains:
 
@@ -72,34 +72,34 @@ This is important for backup: the Grafana PVC is worth backing up because it hol
 
 ## For mas-${MAS_INSTANCE_ID}-core 
 
-First restore the top object Suite (core.mas.ibm.Suite) with "overwrite existing" selected.
+First restore the top object Suite (core.mas.ibm.com.Suite) with "overwrite existing" selected.
 
 Then scale down all the deployments 
 ```
 oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-core
 ```
 
-And restore again, but this time  all the resource with  "overwrite existing" selected but exclude "pods" and "certificateRequest" if present in the restore point.
+And restore again, but this time all the resources with "overwrite existing" selected but exclude "pods" and "certificateRequest" if present in the restore point.
 
 ## ibm-sls 
 
-First restore the top objects LicenseServices (sls.ibm.come.LicenseService) and LicenseClient (sls.ibm.com.LicenseClient) with "overwrite existing" selected.
+First restore the top objects LicenseServices (sls.ibm.com.LicenseService) and LicenseClient (sls.ibm.com.LicenseClient) with "overwrite existing" selected.
 
 Then scale down all the deployments 
 ```
 oc scale --replicas 0 deployment --all -n ibm-sls
 ```
 
-And restore again, but this time  all the resource with  "overwrite existing" selected but exclude "pods" and "certificateRequest" if present in the restore point.
+And restore again, but this time all the resources with "overwrite existing" selected but exclude "pods" and "certificateRequest" if present in the restore point.
 
 ## For cert-manager and grafana 
 
-each time you restore one of this namespace, scale down all the deployments in the namespace 
+Each time you restore one of these namespaces, scale down all the deployments in the namespace 
 ```
 oc scale --replicas 0 deployment --all -n <NAMESPACE>
 ```
 
-Then restore all with  "overwrite existing" selected but exclude "pods" and "certificateRequest" if present in the restore point.
+Then restore all with "overwrite existing" selected but exclude "pods" and "certificateRequest" if present in the restore point.
 
 
 
