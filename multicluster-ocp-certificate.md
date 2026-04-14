@@ -2,7 +2,7 @@
 
 When you set up multicluster you need communication to be secure on both side :
 
-- From primary to secondary for click trhough, the primary need to trust the ca certificate of each of his secondaries 
+- From primary to secondary for click through, the primary need to trust the ca certificate of each of his secondaries 
 - From secondary to primary for licenses leasing each secondary need to trust the ca certificate of the primary
 
 ## Discover how openshift router CA certificate are managed on your cluster 
@@ -77,7 +77,7 @@ cacertconfigmap:
   key: secondaries-ca-bundle.pem
 ```
 
-on the secondary 
+on each secondaries
 ```
 cacertconfigmap:
   name: custom-ca-bundle-store
