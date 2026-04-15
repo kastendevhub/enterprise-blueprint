@@ -33,15 +33,14 @@ Those storage class can change depending of your installation.
 
 The blueprint uses [**Pattern 3A — database snapshot on a permanent backup PVC**](https://github.com/michaelcourcy/kasten-claude/blob/main/kasten-kanister.md#3-database-snapshot-on-a-permanent-pvc-sub-case-a--pvc-mounted-by-workload). The `backupPrehook`
 runs `db2 backup db BLUDB online … include logs` inside the DB2u engine pod, writing the backup
-image to the backup PVC at `/mnt/backup/backup/`. Kasten then snapshots all PVCs (including the
-backup PVC). 
+image to the backup PVC at `/mnt/backup/backup/`. The Blueprint copy also the master label/encryption key of the database.
+ Kasten then snapshots all PVCs (including the backup PVC). 
 
 The blueprint does not implement the restore phase, the restore is described later on [the restore steps section](#restore-steps).
 
 **Blueprint binding approach:** The blueprint is bound to the `Db2uCluster` CR (the top-level
-resource in the DB2u operator ownership chain: `Db2uCluster → Formation → StatefulSet`). The
-recommended approach is to annotate the `Db2uCluster` CR directly. A `BlueprintBinding` targeting
-`db2uclusters` is also provided as a fleet automation mechanism.
+resource in the DB2u operator ownership chain: `Db2uCluster → Formation → StatefulSet`). A `BlueprintBinding` targeting
+`db2uclusters` is provided as a fleet automation mechanism, most of the installations run several instances on the same cluster.
 
 ---
 
@@ -49,15 +48,15 @@ recommended approach is to annotate the `Db2uCluster` CR directly. A `BlueprintB
 
 DB2 encrypts the database at rest and the backup image using a PKCS12 keystore stored at
 `KEYSTORE_LOCATION` (typically `/mnt/blumeta0/db2/keystore/keystore.p12`). The backup image
-cannot be restored without the matching keystore — `db2 restore` will fail with a decryption error
-if the keystore has changed since the backup was taken.
+cannot be restored without the label/encryption in the keystore, it's why we copy it to reinstall 
+it in the destination instance.
 
 **What the blueprint does:**
 
 * `backupPrehook` copie the label and encryption master key alongside the backup image *before* 
   Kasten takes the snapshot. The backup PVC therefore always holds a matched pair (image + key).
 * `restorePosthook` is for the moment manual and described in this document, it must be executed
-  after the backup PVC is restored and db2u restored.
+  after the backup PVC is restored and db2u restarted.
 
 **SSL keystore (not backed up):** The DB2 SSL keystore (`bludb_ssl.kdb`) is stored on the meta PVC
 and is intentionally *not* copied to the backup PVC because for cross-instance restore we need the 
