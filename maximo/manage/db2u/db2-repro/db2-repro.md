@@ -1,6 +1,6 @@
 # Goal 
 
-Repro an environment close to db2
+Repro an environment close to db2u
 
 ## Prerequisite
 

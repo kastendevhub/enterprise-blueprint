@@ -1,0 +1,23 @@
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    description: Provides shallow RWO and RWX Filesystem volumes    
+    k10.kasten.io/sc-supports-read-only-mount: "true"
+  name: ocs-storagecluster-cephfs-shallow
+  resourceVersion: "289969918"
+  uid: fb5f30b0-3f82-4e36-9428-21c50149eb7f
+parameters:
+  clusterID: openshift-storage
+  backingSnapshot: "true"
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: openshift-storage
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+  csi.storage.k8s.io/node-stage-secret-namespace: openshift-storage
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: openshift-storage
+  fsName: ocs-storagecluster-cephfilesystem
+provisioner: openshift-storage.cephfs.csi.ceph.com
+reclaimPolicy: Delete
+volumeBindingMode: Immediate

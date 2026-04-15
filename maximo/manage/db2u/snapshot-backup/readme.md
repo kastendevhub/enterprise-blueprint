@@ -1,6 +1,8 @@
 # Goal 
 
-A blueprint to backup the db2 database in the db2u namespace 
+A blueprint to backup the db2 database in the db2u namespace using non logical dump. 
+
+**Warning** This approach is only for test environment and does not support disaster recovery.
 
 # How does it work ? 
 
