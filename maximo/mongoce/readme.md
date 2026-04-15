@@ -82,11 +82,12 @@ Then deploy the blueprint
 oc create -f mongoce-blueprint.yaml 
 ```
 
-The `preBackupHook` and `postBackupHook` must be applied before and after the policy execute.
+- The `preBackupHook` must be applied before the backup acto
 
-The `postBackupHook` must be applied after the policy execute if there is an error during policy backup.
+- The `postBackupHook` must be applied after the policy export onSuccess and onError 
 
-![Setting up pre and post backup hook](./pre-post-snapshot-actions-hook.png)
+![Setting up pre and post hook](./pre-post-actions-hook.png)
+
 
 # Restoring 
 
