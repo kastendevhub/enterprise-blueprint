@@ -1,0 +1,26 @@
+apiVersion: config.kio.kasten.io/v1alpha1
+kind: BlueprintBinding
+metadata:
+  name: db2u-maximo-blueprintbinding
+  namespace: kasten-io
+spec:
+  blueprintRef:
+    name: db2u-maximo-blueprint
+    namespace: kasten-io
+  resources:
+    matchAll:
+      # Target Db2uCluster CRs — the top-level resource in the DB2u operator hierarchy.
+      # Kasten resolves PVC ownership up to the topmost controller (Db2uCluster).
+      # Pod name convention enforced by the operator: c-<db2ucluster-name>-db2u-0.
+      # NOTE: Due to a known Kasten BlueprintBinding cache bug, this binding may not
+      # trigger reliably. The recommended approach is to annotate the Db2uCluster CR
+      # directly with kanister.kasten.io/blueprint=db2u-maximo-blueprint.
+      - type:
+          operator: In
+          values:
+            - group: db2u.databases.ibm.com
+              resource: db2uclusters
+      # Allow per-workload override via the standard Kasten annotation
+      - annotations:
+          key: kanister.kasten.io/blueprint
+          operator: DoesNotExist

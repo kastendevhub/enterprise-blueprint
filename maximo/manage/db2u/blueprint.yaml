@@ -1,0 +1,120 @@
+apiVersion: cr.kanister.io/v1alpha1
+kind: Blueprint
+metadata:
+  name: db2u-maximo-blueprint
+  namespace: kasten-io
+actions:
+  # backupPrehook: runs before Kasten snapshots the PVCs.
+  #
+  # The blueprint is bound to the Db2uCluster CR via the kanister.kasten.io/blueprint
+  # annotation on the Db2uCluster, or via a BlueprintBinding targeting Db2uCluster CRs.
+  # Template variables use .Object.* (the Db2uCluster object).
+  # The engine pod naming convention enforced by the DB2u operator is:
+  #   c-<db2ucluster-name>-db2u-0
+  #
+  # Writes an online, self-contained DB2 backup (INCLUDE LOGS) to the permanent
+  # backup PVC at /mnt/backup/backup/.  Only one backup image is kept so the
+  # restorePosthook can always find it deterministically.
+  #
+  # Copies the encryption keystore (keystore.p12 / keystore.sth) alongside the
+  # backup image on the same backup PVC.  This pairing ensures that:
+  #   • On same-cluster restore: restorePosthook copies the keystore back to
+  #     KEYSTORE_LOCATION before running db2 restore, guaranteeing the decryption
+  #     key always matches the backup image even if the meta PVC was improperly
+  #     restored by Kasten.
+  #   • On cross-cluster restore: the operator can retrieve the backup image and
+  #     matching keystore from the same location and install them on the target
+  #     cluster (see README.md "Cross-instance restore").
+  #
+  # The SSL keystore (bludb_ssl.kdb / .sth) is intentionally NOT copied to the
+  # backup PVC.  Clients trust the server certificate of the cluster they connect
+  # to; preserving the destination's own SSL certificate means clients do not have
+  # to renew their truststore after a cross-instance restore.
+  #
+  # PREREQUISITE (one-time setup, performed before the first Kasten backup):
+  #   Archive logging must be enabled on BLUDB pointing to the backup PVC.
+  #   Circular logging blocks online backups.
+  #   See README.md "One-time prerequisite — enabling archive logging".
+  backupPrehook:
+    phases:    
+    - func: KubeExec
+      name: db2OnlineBackup
+      args:
+        namespace: "{{ .Object.metadata.namespace }}"
+        pod: "c-{{ .Object.metadata.name }}-db2u-0"
+        container: db2u
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          BACKUP_DIR=/mnt/backup/backup
+          su - db2inst1 -c "mkdir -p $BACKUP_DIR"
+
+          echo "=== DB2u Maximo backup pre-hook ==="
+          echo "Namespace : {{ .Object.metadata.namespace }}"
+          echo "Cluster   : {{ .Object.metadata.name }}"
+          echo "Pod       : c-{{ .Object.metadata.name }}-db2u-0"
+          echo "Backup dir: $BACKUP_DIR"
+
+          # Remove any previous backup image to keep exactly one image per cycle.
+          su - db2inst1 -c "rm -f $BACKUP_DIR/BLUDB.*.001"
+
+          # Online backup with INCLUDE LOGS.
+          # INCLUDE LOGS embeds the archive log files required to bring the database
+          # to a consistent state after restore.  The image is self-contained: the
+          # restorePosthook can perform a full restore + rollforward without needing
+          # the separate archive log directory at /mnt/backup/archivelog.
+          echo "Running DB2 online backup (INCLUDE LOGS) ..."
+          su - db2inst1 -c "db2 backup db BLUDB online to $BACKUP_DIR compress include logs"
+          BACKUP_FILE=$(su - db2inst1 -c "ls $BACKUP_DIR/BLUDB.*.001 | tail -1")
+          echo "Backup image: $BACKUP_FILE"
+
+          # When restoring on another instance we'll need the keystore to decrypt the backup, so copy it to the backup location
+          # The keystore contains the master key which is required to decrypt the backup image.  
+          # The .sth file contains the stash password for the keystore, which is needed if the keystore 
+          # is exported in stashed mode (recommended for security, see README.md "One-time prerequisite — enabling archive logging").
+          echo "Copy BLUDB database encryption master key with its label "
+          LABEL=$(su - db2inst1 -c "/mnt/blumeta0/home/db2inst1/sqllib/adm/db2pd -db BLUDB -encrypt" \
+          | grep "Master Key Label:" \
+          | head -1 \
+          | awk '{print $NF}')
+          echo "Master key label/encryption $LABEL will be copied to $BACKUP_DIR/BLUDB-source.raw"
+          su - db2inst1 -c "/opt/ibm/db2/V11.5.0.0/gskit/bin/gsk8capicmd_64 -cert -export \
+            -db /mnt/blumeta0/db2/keystore/keystore.p12 \
+            -stashed \
+            -label $LABEL \
+            -target $BACKUP_DIR/BLUDB-source.raw -target_type pkcs12 -target_stashed"
+
+          # Flush OS page cache so the block-level CSI snapshot captures the
+          # fully-written backup image and keystore before Kasten triggers it.
+          sync
+          echo "=== Backup pre-hook completed ==="
+
+  # backupPosthook: runs after Kasten has taken the PVC snapshots.
+  # Verifies that the backup image and encryption keystore are present on the
+  # backup PVC.
+  backupPosthook:
+    phases:
+    - func: KubeExec
+      name: db2VerifyBackup
+      args:
+        namespace: "{{ .Object.metadata.namespace }}"
+        pod: "c-{{ .Object.metadata.name }}-db2u-0"
+        container: db2u
+        command:
+        - /bin/bash
+        - -c
+        - |
+          BACKUP_DIR=/mnt/backup/backup
+          echo "=== DB2u Maximo backup post-hook: verifying backup ==="
+          BACKUP_FILE=$(su - db2inst1 -c "ls $BACKUP_DIR/BLUDB.*.001 2>/dev/null | sort | tail -1")
+          if [ -z "$BACKUP_FILE" ]; then
+            echo "ERROR: No backup image found in $BACKUP_DIR"; exit 1
+          fi
+          if [ ! -f "$BACKUP_DIR/BLUDB-source.raw" ]; then
+            echo "ERROR: Encryption keystore not found at $BACKUP_DIR/BLUDB-source.raw"; exit 1
+          fi
+          echo "Backup image : $BACKUP_FILE ($(du -sh "$BACKUP_FILE" | cut -f1))"
+          echo "Keystore     : $BACKUP_DIR/BLUDB-source.raw (present)"
+          echo "=== Backup post-hook completed ==="
