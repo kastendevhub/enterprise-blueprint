@@ -123,13 +123,32 @@ Kasten will be online backups with `INCLUDE LOGS`.
 ## Test data
 
 The DB2 database (BLUDB) and all Maximo application data are pre-provisioned by MAS. No
-installation is required. To validate backup/restore, alter a description field in the database:
+installation is required. To validate backup/restore, alter a description field in the database.
+
+> **WARNING: Do NOT modify the `MAXUPG` row in `MAXIMO.MAXVARS`.** This field is used by the
+> MAS Manage schema upgrade process. If its value is changed to anything other than the expected
+> `V9xxx-NNN` format, the ManageWorkspace operator will fail to reconcile with
+> `"Maximo version not supported"` / `"Query count is 0"`. Use a safe, non-critical field instead
+> (see below).
+
+Use a non-critical field such as `DESCRIPTION` in `MAXIMO.MAXOBJECT` to mark the restore:
 
 ```bash
+# Record the original value before changing it
 kubectl exec -n db2u c-mas-instance1-workspace1-manage-db2u-0 -c db2u -- \
   su - db2inst1 -c "
     db2 connect to BLUDB
-    db2 \"UPDATE MAXIMO.MAXVARS SET VARVALUE='KASTEN_TEST_MARKER' WHERE VARNAME='MAXUPG'\"
+    db2 \"SELECT DESCRIPTION FROM MAXIMO.MAXOBJECT WHERE OBJECTNAME='MXPERSON' FETCH FIRST 1 ROWS ONLY\"
+    db2 disconnect all
+  "
+```
+
+```bash
+# Write the test marker
+kubectl exec -n db2u c-mas-instance1-workspace1-manage-db2u-0 -c db2u -- \
+  su - db2inst1 -c "
+    db2 connect to BLUDB
+    db2 \"UPDATE MAXIMO.MAXOBJECT SET DESCRIPTION='KASTEN_TEST_MARKER' WHERE OBJECTNAME='MXPERSON'\"
     db2 disconnect all
   "
 ```
@@ -139,12 +158,45 @@ Verify the change:
 kubectl exec -n db2u c-mas-instance1-workspace1-manage-db2u-0 -c db2u -- \
   su - db2inst1 -c "
     db2 connect to BLUDB
-    db2 \"SELECT VARVALUE FROM MAXIMO.MAXVARS WHERE VARNAME='MAXUPG'\"
+    db2 \"SELECT DESCRIPTION FROM MAXIMO.MAXOBJECT WHERE OBJECTNAME='MXPERSON'\"
     db2 disconnect all
   "
 ```
 
 After restore, re-run the select and confirm `KASTEN_TEST_MARKER` is gone (original value restored).
+
+### Recovery: if MAXUPG was accidentally modified
+
+If `MAXUPG` was changed and the ManageWorkspace is stuck in `Pending` with DB update failures,
+restore it to a valid version value. First check the companion variable to determine the correct value:
+
+```bash
+kubectl exec -n db2u c-mas-instance1-workspace1-manage-db2u-0 -c db2u -- \
+  su - db2inst1 -c "
+    db2 connect to BLUDB
+    db2 \"SELECT VARNAME, VARVALUE FROM MAXIMO.MAXVARS WHERE VARNAME IN ('MAXUPG','MAXFOUNDUPG','X_MAXUPG')\"
+    db2 disconnect all
+  "
+```
+
+`MAXFOUNDUPG` and `X_MAXUPG` are not modified by the schema upgrade check, so they reveal the
+correct version level. Set `MAXUPG` to the same value as `MAXFOUNDUPG` (e.g. `V9100-117`):
+
+```bash
+kubectl exec -n db2u c-mas-instance1-workspace1-manage-db2u-0 -c db2u -- \
+  su - db2inst1 -c "
+    db2 connect to BLUDB
+    db2 \"UPDATE MAXIMO.MAXVARS SET VARVALUE='V9100-117' WHERE VARNAME='MAXUPG'\"
+    db2 disconnect all
+  "
+```
+
+Then force ManageWorkspace to reconcile:
+```bash
+kubectl annotate manageworkspace instance1-workspace1 \
+  -n mas-instance1-manage \
+  mas.ibm.com/forceReconcile=$(date +%s) --overwrite
+```
 
 ---
 
@@ -278,6 +330,181 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
   echo "Scaling up Maximo namespace: $MANAGE_NS"
   kubectl scale deployment --all -n "$MANAGE_NS" --replicas=1  
 done
+```
+
+---
+
+## DR activation checklist
+
+After restoring the DB2U PVCs and scaling namespaces back up, three issues can prevent the
+ManageWorkspace from reaching `Ready`. Work through them in order.
+
+### 1. Encryption keys must match the restored database
+
+The ManageWorkspace spec has a field `autoGenerateEncryptionKeys`. If set to `true` (the default
+when a workspace is first created), the operator generates fresh `MXE_SECURITY_CRYPTO_KEY` and
+`MXE_SECURITY_CRYPTOX_KEY` values on every new deployment. On a DR cluster this means the keys in
+`workspace1-manage-encryptionsecret` will differ from the keys that were used to encrypt the
+restored database, causing the `ValidateCryptoKey` step in `run-db.sh` to fail:
+
+```
+Failed: Crypto Keys do not match what database uses. UpdateDB will not run.
+status: invalid keys
+```
+
+**Fix — before scaling up the manage namespace:**
+
+1. Copy the `workspace1-manage-encryptionsecret` from the production cluster:
+   ```bash
+   # On the source cluster:
+   kubectl get secret workspace1-manage-encryptionsecret \
+     -n mas-instance1-manage -o yaml > /tmp/encryptionsecret.yaml
+   ```
+
+2. Apply the production keys to the DR cluster (patch, not replace, to avoid changing metadata):
+   ```bash
+   # Extract the base64-encoded key values from the yaml, then:
+   kubectl patch secret workspace1-manage-encryptionsecret \
+     -n mas-instance1-manage --type merge \
+     -p "{\"data\":{\"MXE_SECURITY_CRYPTO_KEY\":\"<prod-b64>\",\"MXE_SECURITY_CRYPTOX_KEY\":\"<prod-b64>\"}}"
+   ```
+
+3. Set `autoGenerateEncryptionKeys: false` in the ManageWorkspace spec so the operator never
+   overwrites the production keys again:
+   ```bash
+   kubectl patch manageworkspace instance1-workspace1 \
+     -n mas-instance1-manage --type merge \
+     -p '{"spec":{"settings":{"deployment":{"autoGenerateEncryptionKeys":false}}}}'
+   ```
+
+4. Restart the maxinstudb deployment so the new secret is mounted, then force reconcile:
+   ```bash
+   kubectl rollout restart deployment instance1-workspace1-manage-maxinst -n mas-instance1-manage
+   kubectl annotate manageworkspace instance1-workspace1 \
+     -n mas-instance1-manage mas.ibm.com/forceReconcile=$(date +%s) --overwrite
+   ```
+
+### 2. MAXUPG must hold a valid version value
+
+`MAXIMO.MAXVARS WHERE VARNAME='MAXUPG'` is read by the schema upgrade step to confirm the
+database is at a supported version. It must match the pattern `V761%`, `V76010%`, `V8%`, or `V9%`.
+If backup/restore testing left it set to anything else (e.g. `KASTEN_TEST_MARKER`), the operator
+fails with `"Maximo version not supported" / "Query count is 0"`.
+
+**Fix:**
+
+```bash
+# Check companion variables to determine the correct value
+kubectl exec -n db2u c-mas-instance1-workspace1-manage-db2u-0 -c db2u -- \
+  su - db2inst1 -c "
+    db2 connect to BLUDB
+    db2 \"SELECT VARNAME, VARVALUE FROM MAXIMO.MAXVARS WHERE VARNAME IN ('MAXUPG','MAXFOUNDUPG','X_MAXUPG')\"
+    db2 disconnect all
+  "
+```
+
+`MAXFOUNDUPG` is not modified by the upgrade check and reveals the correct version. Set
+`MAXUPG` to the same value:
+
+```bash
+kubectl exec -n db2u c-mas-instance1-workspace1-manage-db2u-0 -c db2u -- \
+  su - db2inst1 -c "
+    db2 connect to BLUDB
+    db2 \"UPDATE MAXIMO.MAXVARS SET VARVALUE='V9100-117' WHERE VARNAME='MAXUPG'\"
+    db2 disconnect all
+  "
+```
+
+Then force reconcile as in step 1.
+
+### 3. BDI pods need egress to DB2U (network policy gap)
+
+The default MAS network policies (`instance1-denyall-network-policy` + `instance1-allow-egress`)
+block all cross-namespace egress. The BDI workload pods (label `mas.ibm.com/appType: manage-bdi`)
+have no policy granting them egress to the `db2u` namespace. Symptoms are
+`SqlNonTransientConnectionException: Connection is closed` in the BDI pod logs.
+
+This is a pre-existing gap in the MAS network policy configuration (not caused by the restore),
+but it becomes visible on a fresh DR activation. Apply the following policy:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: instance1-workspace1-bdi-egress
+  namespace: mas-instance1-manage
+spec:
+  podSelector:
+    matchLabels:
+      mas.ibm.com/appType: manage-bdi
+      mas.ibm.com/instanceId: instance1
+  policyTypes:
+  - Egress
+  egress:
+  - {}
+```
+
+```bash
+kubectl apply -f instance1-workspace1-bdi-egress-networkpolicy.yaml
+```
+
+### 4. Verify ManageWorkspace reconciliation succeeded
+
+After applying any of the fixes above, check that the ManageWorkspace reaches `Ready`:
+
+```bash
+# Snapshot of all conditions — run at any time to see current state
+kubectl get manageworkspace instance1-workspace1 -n mas-instance1-manage \
+  -o jsonpath='{range .status.conditions[*]}{.type}{"\t"}{.reason}{"\t"}{.message}{"\n"}{end}' \
+  | column -t -s $'\t'
+```
+
+Expected output when healthy:
+```
+Ready            Ready      
+BuildReady       Build completed   Build generated and tagged with ...
+DeploymentReady  Ready      
+DeploymentCR     Successful
+AcceleratorCR    Ready      Ready to activate accelerators
+Failure          <empty>
+Successful       Successful Last reconciliation succeeded
+Running          Running    Running reconciliation
+```
+
+The two fields to watch are:
+- `Ready` — must be `Ready` (not `Pending` or `Failed`)
+- `DeploymentCR` — must be `Successful` (not `Failed`)
+
+To **watch** until `Ready` transitions to `True`:
+
+```bash
+until kubectl get manageworkspace instance1-workspace1 -n mas-instance1-manage \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}' | grep -q "^Ready$"; do
+  STATUS=$(kubectl get manageworkspace instance1-workspace1 -n mas-instance1-manage \
+    -o jsonpath='{.status.conditions[?(@.type=="DeploymentCR")].message}' 2>/dev/null)
+  echo "$(date +%H:%M:%S) Waiting — DeploymentCR: $STATUS"
+  sleep 30
+done
+echo "ManageWorkspace is Ready"
+```
+
+If it stays in a failed state, check the `run-db.sh` output inside the maxinstudb pod:
+
+```bash
+MAXINST_POD=$(kubectl get pod -n mas-instance1-manage -l mas.ibm.com/appType=maxinstudb \
+  --no-headers -o custom-columns=':metadata.name' | head -1)
+kubectl logs -n mas-instance1-manage "$MAXINST_POD" \
+  | grep -E "status:|Crypto Keys|Query count|BMXAA681[89]|Maximo version"
+```
+
+And check the operator Ansible playbook for the workspace:
+
+```bash
+kubectl logs -n mas-instance1-manage \
+  $(kubectl get pod -n mas-instance1-manage -l app.kubernetes.io/name=ibm-mas-manage \
+    --no-headers -o custom-columns=':metadata.name' | head -1) \
+  --all-containers --since=10m \
+  | grep -E "PLAY RECAP|prepare.db|failed="
 ```
 
 ---
