@@ -227,7 +227,7 @@ done
 ```
 
 > **If you are doing a cross instance restore**
-> Restore the secret <workspaceid>-manage-encryptionsecret in the manage namespaces with Kasten 
+> Restore the secret `<workspaceid>-manage-encryptionsecret` in the manage namespaces with Kasten 
 
 
 and scale down db2u.
