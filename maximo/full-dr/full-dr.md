@@ -1,28 +1,28 @@
 # Full DR 
 
-We call full DR the restoring of your maximo instance on another cluster. 
+We call full DR the restoring of your Maximo instance on another cluster.
 
-We suppose that you got on this new cluster all the Kasten restorepoints 
-created on the previous cluster by either an [import policy](https://docs.kasten.io/latest/usage/migration/) or through a Kasten [disaster recovery action](https://docs.kasten.io/latest/operating/dr#dr-recovery) those topics are not the object of this document.
+We assume that you have on this new cluster all the Kasten restorepoints
+created on the previous cluster, either through an [import policy](https://docs.kasten.io/latest/usage/migration/) or through a Kasten [disaster recovery action](https://docs.kasten.io/latest/operating/dr#dr-recovery). Those topics are not the subject of this document.
 
 # General approach 
 
 Restoring on the new cluster by applying all the restorepoints in a single action does not work. 
 
-That would be indeed the ideal approach and the less complex but it does not align with the relative complexity of the Maximo application :
-- Installation of Maximo follow a strict pipeline and reapplying all the manifest 
-blindly without taking in account this pipeline order does not work
-- Not only the pipeline folllow a strict order but a lot of objects are created by 
-operator controller. This create a complex chain of dependency between object. Restoring all together create a simultaneous children and parent birth leading to potential reconciliation errors. 
-- A lot of certificates managed by the cert-manager instance installed on your 
-previous  openshift cluster won't validate anymore leading to complex rebuilding and reconfiguration of your application.
+That would be indeed the ideal approach and the least complex, but it does not align with the relative complexity of the Maximo application:
+- Installation of Maximo follows a strict pipeline, and reapplying all the manifests
+blindly without taking into account this pipeline order does not work
+- Not only does the pipeline follow a strict order, but a lot of objects are created by
+operator controllers. This creates a complex chain of dependencies between objects. Restoring them all together creates a simultaneous children-and-parent birth, leading to potential reconciliation errors.
+- Many certificates managed by the cert-manager instance installed on your
+previous OpenShift cluster will no longer be valid, leading to complex rebuilding and reconfiguration of your application.
 
-The approach consist in re-installing (not restoring) Maximo with the same 
-configuration that used on your previous cluster. Then you restore component by components. We'll describe thos steps in the rest of this document. 
+The approach consists in re-installing (not restoring) Maximo with the same
+configuration that was used on your previous cluster. Then you restore component by component. We'll describe those steps in the rest of this document.
 
-# Reinstall maximo on the new cluster 
+# Reinstall Maximo on the new cluster
 
-Depending on how you install Maximo, with a full devops maintained pipeline or using the CLI. Apply the same installation process on the new cluster. Once your new maximo installation is ready you can proceed with the restore of the different component.
+Depending on how you installed Maximo, with a fully DevOps-maintained pipeline or using the CLI, apply the same installation process on the new cluster. Once your new Maximo installation is ready you can proceed with the restore of the different components.
 
 # Restore the components on the DR 
 
@@ -32,7 +32,7 @@ You must follow this order for the component you need to restore.
 
 This list of namespaces should not need to be restored/overwritten because their initial install on the DR site is often sufficient:
 - ibm-sls because you reuse your current license during the install of the DR
-- cert-manager-operator because it's fully reinstalled and their is nothing specific between the DR and the source
+- cert-manager-operator because it's fully reinstalled and there is nothing specific between the DR and the source
 - cert-manager — see explanation below
 - grafana because this is standard dashboard created by the mas installer that you usually don't change, if you change them then you can follow [those steps](../mascore/readme.md#for-cert-manager-and-grafana)
 
@@ -67,29 +67,29 @@ This is precisely why the DB2U restore blueprint **does not restore the `bludb_s
 
 > **Rule of thumb:** cert-manager state is a function of which operators are running, not of what data is in the databases. Because the reinstall recreates the operators, the operators recreate the cert-manager state correctly. Restoring cert-manager is only necessary for a pure Kasten "restore everything" approach — which is explicitly not the strategy used here.
 
-## 2. Scale down the manage namepsace
+## 2. Scale down the manage namespace
 
 - Before you scale down the namespace set `autoGenerateEncryptionKeys: false` in the ManageWorkspace spec so the operator won't
-   overwrites the encryption key that you will restore.
+   overwrite the encryption key that you will restore.
    ```bash
    kubectl patch manageworkspace <instanceid>-<workspaceid> \
      -n mas-instance1-manage --type merge \
      -p '{"spec":{"settings":{"deployment":{"autoGenerateEncryptionKeys":false}}}}'
    ```
 - Scale down the manage namespace by scaling down all the deployment to zero 
-- Restore the secret <workspaceid>-manage-encryptionsecret with Kasten 
+- Restore the secret `<workspaceid>-manage-encryptionsecret` with Kasten 
 - Restore the PVC with Kasten 
 - Keep the manage namespace scaled down until you restore the manage database (whether it's db2u or an external database)
 
 ## 3. Restore MongoCE database
 
-Follow the restore proecedure describe in the [mongoce](./mongoce/)
+Follow the restore procedure described in the [mongoce](./mongoce/)
 
 ## 4. Restore the manage database 
 
 If you're using DB2U (built in database for manage) follow the [DB2U restore guide](./manage/db2u/). 
 
-If you're not using DB2U database but an external database, restore the exernal database with the backup of the production database. 
+If you're not using DB2U database but an external database, restore the external database with the backup of the production database.
 
 ## 5. Scale up the manage namespace 
 
