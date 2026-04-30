@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: kasten-alerting
+spec:
+  route:
+    continue: false
+    matchers:
+      - name: alertname
+        value: action-on-error
+        matchType: =
+    groupBy: ['type']
+    groupWait: 5s
+    groupInterval: 5m
+    repeatInterval: 5h
+    receiver: 'kasten-action-on-error-receiver'
+  receivers:
+  - name: 'kasten-action-on-error-receiver'
+    # configure your receiver here

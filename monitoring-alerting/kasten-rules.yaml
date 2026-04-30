@@ -1,0 +1,101 @@
+###############
+# Kasten rules
+###############
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    release: prom
+  name: kasten-rules
+  namespace: kasten-io
+spec:
+  groups:
+    - name: ./kasten.rules
+      rules:
+        - alert: kasten-catalog-over-50-percent
+          annotations:
+            description: 'The size of the catalog is over 50 % : {{ $value }} %.'
+            runbook_url: 'https://docs.kasten.io/latest/references/best-practices.html#monitoring-and-alerting'
+            summary: The size of the catalog is over 50 %.
+          expr: 100-catalog_persistent_volume_free_space_percent > 50
+          labels:
+            namespace: kasten-io
+            severity: warning
+        - alert: kasten-failed-action
+          annotations:
+            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ $labels.namespace}} is failing.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
+            summary: Action on error
+          expr: 'increase(catalog_actions_count{status="failed"}[1h])>0'
+          labels:
+            severity: critical
+        - alert: kasten-skipped-action
+          annotations:
+            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ $labels.namespace}} is being skipped.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
+            summary: Action skipped
+          expr: 'increase(catalog_actions_count{status="skipped"}[1h])>0'
+          labels:
+            severity: warning
+        - alert: kasten-license-non-compliant
+          annotations:
+            description: 'Your license is non compliant, please check on the dashboard Settings > Licensing.'
+            runbook_url: 'https://docs.kasten.io/latest/multicluster/concepts/license.html'
+            summary: License non compliant
+          expr: metering_license_compliance_status == 0
+          labels:
+            namespace: kasten-io
+            severity: warning
+        - alert: kasten-dr-policy-not-in-place
+          annotations:
+            description: 'The DR policy is not in place or is not valid.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
+            summary: DR policy not in place or is not valid
+          expr: 'policies_count{action="k10dr",status="Success"} != 1'
+          labels:
+            severity: critical
+        - alert: kasten-policies-without-export-location
+          annotations:
+            description: 'One of the policies do not have export enabled.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
+            summary: Policies without export location
+          expr: 'policies_count{action="backup",chained!="export",status="Success"} > 0'
+          labels:
+            severity: critical
+        - alert: kasten-compliance-unmanaged-namespaces
+          annotations:
+            description: 'Certain namespaces are not part of an active backup policy.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
+            summary: Unmanaged namespaces
+          expr: 'compliance_count{state="Unmanaged"} > 0'
+          labels:
+            severity: critical
+        - alert: kasten-event-group 
+          expr: events_service_event_groups > 0
+          labels:
+            severity: critical 
+            namespace: kasten-io     
+          annotations:
+            summary: "A kasten critical event is detected"
+            description: "The kasten event {{ $labels.action }} has been emmited."
+            runbook_url: "https://docs.kasten.io/latest/operating/support.html"
+        - alert: kasten-service-down 
+          expr: up{application="k10"} == 0
+          labels:
+            severity: critical 
+            namespace: kasten-io  
+          annotations:
+            summary: "A kasten service is down"
+            description: "The kasten service {{ $labels.service }} is down."
+            runbook_url: "https://docs.kasten.io/latest/operating/support.html"
+        - alert: kasten-executor-down 
+          expr: up{app="k10"} == 0
+          labels:
+            severity: critical 
+            namespace: kasten-io     
+          annotations:
+            summary: "A kasten service is down"
+            description: "The kasten service {{ $labels.service }} is down."
+            runbook_url: "https://docs.kasten.io/latest/operating/support.html"
+
+ 

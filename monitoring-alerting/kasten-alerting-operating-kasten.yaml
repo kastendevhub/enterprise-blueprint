@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: kasten-alerting
+  namespace: kasten-io
+spec:
+  route:
+    continue: false    
+    groupBy: ['alertname']
+    groupWait: 5s
+    groupInterval: 5m
+    repeatInterval: 5h
+    receiver: 'kasten-operating-receiver'
+  receivers:
+  - name: 'kasten-operating-receiver'
+    # configure your receiver here
