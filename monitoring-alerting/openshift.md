@@ -130,6 +130,7 @@ spec:
   selector:
     matchLabels:
       component: crypto
+EOF
 ```
 
 
