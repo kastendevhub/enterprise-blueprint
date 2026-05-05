@@ -276,8 +276,64 @@ stringData:
                      receivers:
                      - name: "email-notifications"
                        email_configs:
-                       - to: "support@kasten.io"
+                       - to: "support@kasten.io,ops-team@example.com"
+                         headers:
+                           Subject: '[Kasten][{{ .Status | toUpper }}] {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
 
 type: Opaque
 EOF
 ```
+
+### Multiple recipients
+
+The `to` field accepts a comma-separated list of addresses:
+
+```
+to: "support@kasten.io,ops-team@example.com"
+```
+
+### Customising the email subject
+
+Use the `headers` map with a Go template string. The subject above produces
+messages like `[Kasten][FIRING] Action on error`.
+
+### Customising the email body
+
+Alertmanager generates the body from a Go template. If you set neither `html`
+nor `text` in `email_configs`, it falls back to its built-in HTML template,
+which already renders the `summary`, `description`, and `runbook_url`
+annotations defined in [kasten-rules.yaml](./kasten-rules.yaml) — so no custom
+body is required unless you want specific layout or branding.
+
+To override, add an `html` (or `text`) field to `email_configs`:
+
+```yaml
+email_configs:
+- to: "support@kasten.io,ops-team@example.com"
+  headers:
+    Subject: '[Kasten][{{ .Status | toUpper }}] {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+  html: |
+    <h2>Kasten Alert — {{ .Status | toUpper }}</h2>
+    {{ range .Alerts }}
+    <p><b>{{ .Annotations.summary }}</b><br/>
+    {{ .Annotations.description }}<br/>
+    Severity: {{ .Labels.severity }}<br/>
+    <a href="{{ .Annotations.runbook_url }}">Runbook</a></p>
+    {{ end }}
+```
+
+The main template variables available in both `html` and `text` are:
+
+| Variable | Content |
+|---|---|
+| `.Status` | `"firing"` or `"resolved"` |
+| `.Alerts` | all alerts in the group |
+| `.Alerts.Firing` | only firing alerts |
+| `.Alerts.Resolved` | only resolved alerts |
+| `.CommonLabels` | labels shared by all alerts |
+| `.CommonAnnotations` | annotations shared by all alerts |
+| `.GroupLabels` | labels used to group this batch |
+
+Each alert inside `range .Alerts` exposes `.Labels.<name>`,
+`.Annotations.<name>`, `.StartsAt`, `.EndsAt`, and `.GeneratorURL` (a link back
+to the Prometheus expression that triggered the alert).
