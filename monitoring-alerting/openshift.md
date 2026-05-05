@@ -134,6 +134,43 @@ EOF
 ```
 
 
+## Allow the Monitoring Namespace to Scrape kasten-io Pods
+
+If your cluster enforces NetworkPolicies, the Prometheus pods running in
+`openshift-user-workload-monitoring` cannot reach the scrape targets in
+`kasten-io` without an explicit ingress rule.
+
+Apply the following NetworkPolicy once in the `kasten-io` namespace:
+
+```
+oc apply -f kasten-ocp-monitoring-netpol.yaml
+```
+
+or inline:
+
+```
+cat <<EOF | oc apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-openshift-user-workload-monitoring
+  namespace: kasten-io
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-user-workload-monitoring
+EOF
+```
+
+The `podSelector: {}` matches all pods in `kasten-io`. The namespace selector
+uses the `kubernetes.io/metadata.name` label that Kubernetes sets automatically
+on every namespace, so no manual labelling is required.
+
 ## Check the Alerting Rules Are Activated
 
 Now check that the new configuration has been injected in Thanos:
