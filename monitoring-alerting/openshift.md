@@ -337,3 +337,84 @@ The main template variables available in both `html` and `text` are:
 Each alert inside `range .Alerts` exposes `.Labels.<name>`,
 `.Annotations.<name>`, `.StartsAt`, `.EndsAt`, and `.GeneratorURL` (a link back
 to the Prometheus expression that triggered the alert).
+
+## Troubleshoot Alertmanager when emails are not received
+
+### 1. Check pods are healthy
+
+```
+oc get pods -n openshift-user-workload-monitoring
+```
+
+You should see `alertmanager-user-workload-0` and `alertmanager-user-workload-1`
+in `Running` state.
+
+### 2. Read Alertmanager logs
+
+```
+oc logs -n openshift-user-workload-monitoring alertmanager-user-workload-0
+```
+
+SMTP connection errors, authentication failures, or template rendering errors
+appear here. Look for lines containing `error` or `msg="Notify"`.
+
+### 3. Open the Alertmanager UI
+
+Port-forward to the Alertmanager pod and open the web UI in your browser:
+
+```
+oc port-forward -n openshift-user-workload-monitoring alertmanager-user-workload-0 9093
+```
+
+Then open `http://localhost:9093`.
+
+- **Alerts tab** — shows all alerts currently received by Alertmanager. If empty,
+  the problem is upstream (alerts are not firing in Prometheus/Thanos).
+- **Status > Config tab** — shows the configuration Alertmanager actually loaded.
+  Compare it against your secret to confirm the YAML was parsed correctly.
+- **Status > Receivers tab** — lists the configured receivers and their integration
+  status.
+
+### 4. Verify the secret is correctly formatted
+
+Alertmanager silently ignores a malformed secret. Decode and inspect it:
+
+```
+oc get secret alertmanager-user-workload \
+  -n openshift-user-workload-monitoring \
+  -o jsonpath='{.data.alertmanager\.yaml}' | base64 -d
+```
+
+The output must be valid YAML with correct indentation.
+
+### 5. Check that alerts are actually firing in Thanos
+
+Port-forward to the Thanos Ruler UI:
+
+```
+oc port-forward -n openshift-user-workload-monitoring \
+  $(oc get pod -n openshift-user-workload-monitoring -l app.kubernetes.io/name=thanos-ruler -o name | head -1) 10902
+```
+
+Open `http://localhost:10902/rules` and verify the Kasten rules are listed and
+that their state is `firing` when expected.
+
+### 6. Send a test alert manually
+
+You can push a synthetic alert directly to Alertmanager to verify the receiver
+works independently of the rules:
+
+```
+oc port-forward -n openshift-user-workload-monitoring alertmanager-user-workload-0 9093
+
+curl -s -X POST http://localhost:9093/api/v2/alerts \
+  -H 'Content-Type: application/json' \
+  -d '[{
+    "labels":      {"alertname":"test-alert","severity":"critical","namespace":"kasten-io"},
+    "annotations": {"summary":"Test alert","description":"Sent manually to verify email delivery"}
+  }]'
+```
+
+If the email arrives, the receiver is correctly configured and the issue is that
+no real alerts are firing. If it does not, check the logs again (step 2) for the
+exact SMTP error.
