@@ -127,14 +127,6 @@ SELECT * FROM links;
 exit
 ```
 
-### Configure the Backup Annotations
-
-If you created your cluster using `cluster-example.yaml`, the cluster already includes the Kasten addon. If not, add the following annotation to your cluster CR:
-
-```yaml
-"k8s.enterprisedb.io/addons": '["kasten"]'
-```
-
 ### Install the EDB Blueprint
 
 ```bash
