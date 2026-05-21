@@ -21,6 +21,7 @@ The [external backup adapter](https://www.enterprisedb.com/docs/postgres_for_kub
 | **Blueprint and BlueprintBinding example**    | Yes                              |                                            |
 | **Blueprint actions**                         | Backup & Restore                 | Deletion is implemented via restorepoint deletion since backup artifacts reside on a shared PVC |
 | **Backup performance impact**                 | None                             | Backups run on the secondary replica and do not affect the primary |
+| **kasten**                 | 8.5.7                                               |                                            |
 
 ## Limitations
 
