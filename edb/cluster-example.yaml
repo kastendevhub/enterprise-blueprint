@@ -21,9 +21,6 @@ metadata:
         - key: "kasten-enterprisedb.io/hasHooks"
           metadataType: "label"
           value: "true"
-        - key: "kanister.kasten.io/blueprint"
-          metadataType: "annotation"
-          value: "edb-hooks"
       preBackupHookConfiguration:
         container:
           key: "kasten-enterprisedb.io/pre-backup-container"
