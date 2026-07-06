@@ -1,4 +1,5 @@
 licence.md
 Enterprise-blueprint.pptx
-cpd/
-cpd-cli-workspace/
+cp4d/
+.DS_Store
+**/cpd-cli-workspace/
