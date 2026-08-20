@@ -1,0 +1,117 @@
+---
+# Root credentials of the MinIO server we deploy in this namespace.
+# These are throw-away credentials for a throw-away benchmark target.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-root
+  namespace: warp
+type: Opaque
+stringData:
+  MINIO_ROOT_USER: minio
+  MINIO_ROOT_PASSWORD: minio123
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: warp
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          envFrom:
+            - secretRef:
+                name: minio-root
+          env:
+            # MinIO writes its configuration under $HOME/.minio. Pointing HOME at
+            # the emptyDir keeps the container working when the platform forces a
+            # random non-root UID (OpenShift restricted-v2 SCC), because the
+            # image default HOME=/root is not writable by that UID.
+            - name: HOME
+              value: /data
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          # emptyDir keeps the tutorial free of any storage-class dependency.
+          #
+          # NOTE: with no "medium", an emptyDir is a directory on the NODE'S
+          # DISK -- it is not in memory. On this cluster that disk is what caps
+          # MinIO writes at ~136 MiB/s, which is why the readme insists the
+          # local MinIO PUT figure is not a network measurement.
+          #
+          # Setting "medium: Memory" would make it a RAM-backed tmpfs instead,
+          # which removes that ceiling but is charged to the container's memory
+          # limit above. See "How to reproduce the RAM-backed run" in the
+          # readme -- it is a diagnostic trick, not a deployment pattern.
+          #
+          # sizeLimit is a safety belt: if a long benchmark writes more than
+          # this, kubelet evicts THIS pod instead of filling up the node disk.
+          emptyDir:
+            sizeLimit: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: warp
+  labels:
+    app: minio
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001

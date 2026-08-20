@@ -1,0 +1,67 @@
+---
+# MIXED workload: GET / STAT / PUT / DELETE at the same time.
+# Closer to what a real backup tool does to a bucket, and the best way to see
+# whether the endpoint degrades when reads and writes compete.
+#
+# RUN ONE BENCHMARK AT A TIME. The three jobs share the same bucket and warp
+# empties that bucket before and after each run, so running them concurrently
+# makes them fight and every number comes out wrong.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: warp-mixed
+  namespace: warp
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app: warp
+        benchmark: mixed
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: warp
+          image: minio/warp:latest
+          command: ["/bin/sh", "/scripts/run.sh"]
+          workingDir: /tmp
+          env:
+            - name: BENCH_OP
+              value: mixed
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - secretRef:
+                name: s3-target
+            - configMapRef:
+                name: warp-params
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: warp-runner
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

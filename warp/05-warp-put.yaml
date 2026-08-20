@@ -1,0 +1,74 @@
+---
+# UPLOAD bandwidth: cluster ---> S3 endpoint.
+# This is the direction that matters for a Kasten export.
+#
+# RUN ONE BENCHMARK AT A TIME. The three jobs share the same bucket and warp
+# empties that bucket before and after each run, so running them concurrently
+# makes them fight and every number comes out wrong.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: warp-put
+  namespace: warp
+spec:
+  backoffLimit: 4
+  # Safety belt against a runaway benchmark. Raise it if you set a long DURATION.
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app: warp
+        benchmark: put
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: warp
+          image: minio/warp:latest
+          command: ["/bin/sh", "/scripts/run.sh"]
+          workingDir: /tmp
+          env:
+            - name: BENCH_OP
+              value: put
+            # Reported in the banner: bandwidth is always measured *from a node*.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            # warp drops its raw benchmark data in the working directory, and
+            # HOME must be writable when the platform forces a random UID.
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - secretRef:
+                name: s3-target
+            - configMapRef:
+                name: warp-params
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            # warp generates random data and computes checksums, so it is CPU
+            # bound before it is network bound. If the reported throughput
+            # plateaus while the pod sits at its CPU limit, raise this limit:
+            # you are measuring the limit, not the network.
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: warp-runner
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

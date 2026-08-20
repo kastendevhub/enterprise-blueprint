@@ -1,0 +1,104 @@
+---
+# The glue between "S3 connection settings as environment variables" and the
+# warp command line. You should not need to edit this file.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: warp-runner
+  namespace: warp
+data:
+  run.sh: |
+    #!/bin/sh
+    # Translate the S3_* variables coming from the s3-target Secret into the
+    # WARP_* variables warp reads natively, then run one benchmark.
+
+    fail() { echo "ERROR: $*" >&2; exit 1; }
+
+    BENCH_OP="${BENCH_OP:-put}"
+
+    [ -n "${S3_ENDPOINT:-}" ]          || fail "S3_ENDPOINT is not set (see 02-s3-target.yaml)"
+    [ -n "${S3_ACCESS_KEY_ID:-}" ]     || fail "S3_ACCESS_KEY_ID is not set"
+    [ -n "${S3_SECRET_ACCESS_KEY:-}" ] || fail "S3_SECRET_ACCESS_KEY is not set"
+    [ -n "${S3_BUCKET:-}" ]            || fail "S3_BUCKET is not set"
+
+    # warp wants a bare "host:port" plus a separate TLS switch, so split the URL.
+    case "$S3_ENDPOINT" in
+      https://*) tls=true  ; hostport="${S3_ENDPOINT#https://}" ;;
+      http://*)  tls=false ; hostport="${S3_ENDPOINT#http://}"  ;;
+      *)         tls=true  ; hostport="$S3_ENDPOINT"            ;;
+    esac
+    hostport="${hostport%%/*}"          # drop any path or trailing slash
+
+    host="${hostport%%:*}"
+    port="${hostport##*:}"
+    if [ "$port" = "$host" ]; then      # no explicit port in the endpoint
+      if [ "$tls" = true ]; then port=443; else port=80; fi
+    fi
+
+    # Check that the endpoint is actually reachable before starting, because an
+    # unreachable endpoint is by far the most common cause of a "stuck" or
+    # cryptic benchmark. We retry for a while so that this job can be applied at
+    # the same time as the MinIO deployment, then give up with a clear message.
+    # A proxy makes a direct TCP connect meaningless, so skip the check then.
+    if [ -n "${HTTPS_PROXY:-}${HTTP_PROXY:-}${https_proxy:-}${http_proxy:-}" ]; then
+      echo "A proxy is configured, skipping the direct TCP reachability check."
+    else
+      waited=0
+      until nc -z -w 5 "$host" "$port"; do
+        if [ "$waited" -ge "${WAIT_ENDPOINT_SECONDS:-180}" ]; then
+          fail "cannot open a TCP connection to ${host}:${port} from this pod.
+      Check DNS resolution, egress NetworkPolicies, firewalls and proxy settings.
+      If the endpoint is only reachable through a proxy, set HTTPS_PROXY on the job."
+        fi
+        echo "waiting for ${host}:${port} to accept connections (${waited}s)..."
+        sleep 5
+        waited=$((waited + 5))
+      done
+      echo "TCP connect to ${host}:${port} ... OK"
+    fi
+
+    # Credentials go through the environment, never on the command line, so that
+    # they do not show up in the banner below nor in the pod process list.
+    export WARP_HOST="$hostport"
+    export WARP_ACCESS_KEY="$S3_ACCESS_KEY_ID"
+    export WARP_SECRET_KEY="$S3_SECRET_ACCESS_KEY"
+    [ "$tls" = true ]          && export WARP_TLS=true
+    [ -n "${S3_REGION:-}" ]    && export WARP_REGION="$S3_REGION"
+
+    set -- "$BENCH_OP" \
+      --bucket="$S3_BUCKET" \
+      --obj.size="${OBJ_SIZE:-64MiB}" \
+      --concurrent="${CONCURRENT:-8}" \
+      --duration="${DURATION:-30s}" \
+      --no-color
+
+    # --objects only exists on the benchmarks that pre-populate the bucket.
+    case "$BENCH_OP" in
+      get|mixed|stat|list|versioned) set -- "$@" --objects="${OBJECTS:-160}" ;;
+    esac
+
+    [ "${INSECURE_TLS:-false}" = true ]      && set -- "$@" --insecure
+    [ -n "${LOOKUP:-}" ]                     && set -- "$@" --lookup="$LOOKUP"
+    [ "${ANALYZE_VERBOSE:-false}" = true ]   && set -- "$@" --analyze.v
+    [ "${DISABLE_MULTIPART:-false}" = true ] && set -- "$@" --disable-multipart
+
+    cat <<EOF
+    ==========================================================================
+     warp S3 bandwidth benchmark
+    ==========================================================================
+     benchmark     : $BENCH_OP
+     endpoint      : $S3_ENDPOINT
+     warp --host   : $hostport (TLS: $tls)
+     region        : ${S3_REGION:-<none>}
+     bucket        : $S3_BUCKET   <-- EMPTIED BEFORE AND AFTER THE RUN
+     access key    : $S3_ACCESS_KEY_ID
+     object size   : ${OBJ_SIZE:-64MiB}
+     concurrent    : ${CONCURRENT:-8}
+     duration      : ${DURATION:-30s}
+     measured from : pod ${HOSTNAME} on node ${NODE_NAME:-unknown}
+    ==========================================================================
+    EOF
+
+    echo "+ warp $*"
+    # EXTRA_FLAGS is deliberately unquoted so that it is split into words.
+    exec /warp "$@" ${EXTRA_FLAGS:-}

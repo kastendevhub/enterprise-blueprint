@@ -1,0 +1,69 @@
+---
+# DOWNLOAD bandwidth: S3 endpoint ---> cluster.
+# This is the direction that matters for a Kasten restore from an export.
+#
+# warp first uploads OBJECTS x OBJ_SIZE of data (preparation phase, NOT
+# measured), then reads it back for DURATION and reports on the reads.
+#
+# RUN ONE BENCHMARK AT A TIME. The three jobs share the same bucket and warp
+# empties that bucket before and after each run, so running them concurrently
+# makes them fight and every number comes out wrong.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: warp-get
+  namespace: warp
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app: warp
+        benchmark: get
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: warp
+          image: minio/warp:latest
+          command: ["/bin/sh", "/scripts/run.sh"]
+          workingDir: /tmp
+          env:
+            - name: BENCH_OP
+              value: get
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - secretRef:
+                name: s3-target
+            - configMapRef:
+                name: warp-params
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: warp-runner
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

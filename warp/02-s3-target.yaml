@@ -1,0 +1,44 @@
+---
+# =============================================================================
+# THIS IS THE ONLY FILE YOU HAVE TO EDIT.
+#
+# It describes WHICH S3 endpoint you want to measure the bandwidth to.
+# Out of the box it points at the MinIO service deployed by 01-minio.yaml, so
+# the tutorial works with zero configuration.
+#
+# To measure a real endpoint (AWS S3, Azure Blob via S3 gateway, on-prem
+# object storage, a Kasten location profile bucket, ...) just replace the four
+# values below and re-run the job.
+#
+# !!! WARNING !!! -----------------------------------------------------------
+# warp EMPTIES the bucket it benchmarks, before and after each run.
+# Point S3_BUCKET at a dedicated, EMPTY bucket.
+# NEVER point it at a bucket that holds Kasten exports or any other data.
+# ---------------------------------------------------------------------------
+# =============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-target
+  namespace: warp
+type: Opaque
+stringData:
+  # Full URL, scheme included. The scheme decides whether warp uses TLS:
+  #   http://...  -> plain HTTP
+  #   https://... -> TLS
+  # A value with no scheme is treated as HTTPS.
+  # Examples:
+  #   http://minio.warp.svc.cluster.local:9000     (the MinIO of this tutorial)
+  #   https://s3.eu-west-3.amazonaws.com           (AWS S3, Paris)
+  #   https://minio.apps.example.com               (on-prem MinIO behind a route)
+  S3_ENDPOINT: "http://minio.warp.svc.cluster.local:9000"
+
+  # Leave empty for MinIO and most on-prem object stores. Required by AWS S3.
+  S3_REGION: ""
+
+  S3_ACCESS_KEY_ID: "minio"
+  S3_SECRET_ACCESS_KEY: "minio123"
+
+  # Dedicated, empty bucket. warp creates it if the credentials allow it,
+  # otherwise create it yourself beforehand.
+  S3_BUCKET: "warp-benchmark-bucket"

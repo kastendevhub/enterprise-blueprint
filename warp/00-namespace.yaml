@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: warp
+  labels:
+    # Everything in this tutorial runs in this single namespace: the MinIO
+    # server used as a reference target, and the warp benchmark jobs.
+    app.kubernetes.io/part-of: warp-bandwidth-test

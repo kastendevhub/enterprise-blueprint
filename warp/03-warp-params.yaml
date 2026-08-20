@@ -1,0 +1,50 @@
+---
+# Tuning knobs shared by the three benchmark jobs. Sensible defaults for a
+# "quick bandwidth report": one run takes a bit more than DURATION.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: warp-params
+  namespace: warp
+data:
+  # Size of each object. Large objects measure raw bandwidth; small objects
+  # measure request overhead and latency instead. 64MiB is a good compromise
+  # and is in the same ballpark as the chunks Kasten pushes when it exports.
+  OBJ_SIZE: "64MiB"
+
+  # Number of parallel S3 operations inside the single warp pod. One stream
+  # rarely saturates a link: 8 to 32 is where you find the real ceiling.
+  CONCURRENT: "8"
+
+  # How long the measured phase runs. 30s is enough for a quick report,
+  # use 2m or 5m for a number you want to put in a design document.
+  DURATION: "30s"
+
+  # Only used by the get and mixed benchmarks: how many objects warp uploads
+  # during the (unmeasured) preparation phase before reading them back.
+  # That phase writes OBJECTS x OBJ_SIZE bytes (48 x 64MiB = 3GiB here) and is
+  # not measured, so it is pure waiting time: lower it on a slow link.
+  OBJECTS: "48"
+
+  # Set to "true" for an endpoint serving a self-signed or otherwise
+  # untrusted certificate.
+  INSECURE_TLS: "false"
+
+  # "path" or "host". Leave empty to let warp autodetect. Most on-prem S3
+  # implementations need path-style addressing.
+  LOOKUP: ""
+
+  # "true" adds per-operation percentiles and per-host breakdown to the report.
+  ANALYZE_VERBOSE: "false"
+
+  # "true" forces one single PUT per object instead of a multipart upload.
+  DISABLE_MULTIPART: "false"
+
+  # How long the job waits for the endpoint to accept TCP connections before
+  # giving up. It lets a benchmark job be applied together with the MinIO
+  # deployment, and it bounds the wait when the endpoint is simply wrong.
+  WAIT_ENDPOINT_SECONDS: "180"
+
+  # Any extra warp flag, appended verbatim to the command line.
+  # e.g. "--obj.randsize" or "--rps-limit=100"
+  EXTRA_FLAGS: ""
