@@ -319,7 +319,36 @@ Throughput, split into 28 x 1s:
  * Slowest: 177.7MiB/s, 2.78 obj/s
 ```
 
-Two things to read here:
+## Why `Total` is bigger than every line above it
+
+This report trips people up: `Total` says 600.63 MiB/s while the largest single operation, GET, says
+458.36. Nothing is inconsistent — **the operations run simultaneously, so `Total` is their sum**:
+
+```
+GET   458.36 MiB/s   (endpoint -> cluster)
+PUT   138.17 MiB/s   (cluster -> endpoint)
+                     +
+Total 600.63 MiB/s   (596.53 by addition, see below)
+```
+
+In any given second the endpoint is sending 458 MiB *and* receiving 138 MiB, so roughly 600 MiB of
+traffic really is crossing the wire. Each per-operation line reports only its own share.
+
+That is also why **`STAT` and `DELETE` show no MiB/s at all, only `obj/s`**: a STAT is a HEAD
+request and a DELETE carries no object payload. They consume request capacity and add to the object
+rate without moving bytes. So for bandwidth `Total ≈ GET + PUT`, while for object rate all four
+contribute (`7.16 + 2.16 + 5.00 + 0.92 = 15.24` against the reported `15.53 obj/s`).
+
+The addition is not always exact. Look at the `Ran:` values — GET 27 s, PUT 28 s, STAT 26 s,
+DELETE 26 s, Total 28 s. Each report is computed over its own operation's measurement window and
+the Total over the whole run, so uneven throughput leaves a small residual: 0.7% here, and exactly
+zero in the AWS run later on (`642.29 + 199.51 = 841.80`, the reported Total to the decimal). Treat
+a discrepancy of a percent or two as windowing noise, not as a different quantity.
+
+**Use `Total` to answer "what is this link carrying", and the per-operation lines to answer "which
+direction is suffering".**
+
+## What this run tells us
 
 - **PUT holds up** (138 MiB/s mixed versus 136 MiB/s alone): writes are not hurt by concurrent
   reads on this endpoint.
@@ -785,6 +814,10 @@ Report: STAT.   Average: 6.54 obj/s
 Report: DELETE. Average: 1.88 obj/s
 Report: Total.  Average: 841.80 MiB/s, 21.34 obj/s
 ```
+
+Here the arithmetic behind `Total` is exact — `642.29 + 199.51 = 841.80` — because reads and writes
+happen concurrently and both directions count. See
+[why Total is bigger than every line above it](#why-total-is-bigger-than-every-line-above-it).
 
 # Comparing the endpoints
 
