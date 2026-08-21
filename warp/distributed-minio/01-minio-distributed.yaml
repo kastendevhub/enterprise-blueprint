@@ -1,0 +1,164 @@
+---
+# Headless service: gives each pod a stable DNS name so the MinIO nodes can
+# find each other. publishNotReadyAddresses is required, because the pods must
+# resolve each other BEFORE any of them can become ready (they form a quorum
+# first, and readiness depends on that quorum existing).
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-hl
+  namespace: warp
+  labels:
+    app: minio-dist
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: minio-dist
+  ports:
+    - name: s3
+      port: 9000
+---
+# The S3 endpoint to point warp at. Deliberately a different name from the
+# tutorial's single-pod "minio" Service, so both can coexist and be compared.
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-dist
+  namespace: warp
+  labels:
+    app: minio-dist
+spec:
+  selector:
+    app: minio-dist
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio-dist
+  namespace: warp
+spec:
+  serviceName: minio-hl
+  replicas: 4
+  podManagementPolicy: Parallel      # all 4 must come up together to form quorum
+  selector:
+    matchLabels:
+      app: minio-dist
+  template:
+    metadata:
+      labels:
+        app: minio-dist
+    spec:
+      # One MinIO per node. This is the whole point of the exercise: each pod
+      # gets its own node's disk throughput budget, instead of 4 pods sharing
+      # one node's budget and learning nothing.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: minio-dist
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          # 4 nodes x 4 drives = 16 drives in one erasure set. MinIO's default
+          # parity for a 16-drive set is EC:4, i.e. 12 data + 4 parity, so a
+          # write costs 16/12 = 1.33x its payload in disk I/O. Compare with an
+          # 8-drive set at EC:4 (4+4), which costs 2x. Drive count changes the
+          # amplification, which is why it is a tuning lever and not a detail.
+          args:
+            - server
+            - http://minio-dist-{0...3}.minio-hl.warp.svc.cluster.local:9000/data-{0...3}
+            - --console-address
+            - ":9001"
+          envFrom:
+            - secretRef:
+                name: minio-root
+          env:
+            - name: HOME
+              value: /tmp
+            # Set to "EC:2" to trade redundancy for write throughput
+            # (14 data + 2 parity = 1.14x amplification). Empty means MinIO's
+            # default of EC:4.
+            - name: MINIO_STORAGE_CLASS_STANDARD
+              value: ""
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - { name: data-0, mountPath: /data-0 }
+            - { name: data-1, mountPath: /data-1 }
+            - { name: data-2, mountPath: /data-2 }
+            - { name: data-3, mountPath: /data-3 }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  # 4 drives per pod. Premium SSD throughput scales with SIZE, not just count,
+  # so this is a throughput knob and not only a capacity one:
+  #   128 GiB (P10) ~100 MBps/disk -> measured 836 MiB/s PUT
+  #   512 GiB (P20) ~150 MBps/disk -> measured 1005 MiB/s PUT  (+20%)
+  # 128 GiB is the cheaper starting point (~$0.45/hour for all 16 disks
+  # against ~$1.60/hour at 512 GiB). Expanding later works: the class sets
+  # allowVolumeExpansion, so you can patch these PVCs in place.
+  # These disks bill for as long as they exist -- see the readme's teardown.
+  volumeClaimTemplates:
+    - metadata:
+        name: data-0
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi
+    - metadata:
+        name: data-1
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi
+    - metadata:
+        name: data-2
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi
+    - metadata:
+        name: data-3
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi

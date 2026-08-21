@@ -107,6 +107,7 @@ shared with production traffic, run it during a maintenance window, or cap it wi
 | [05-warp-put.yaml](05-warp-put.yaml) | Job: **upload** bandwidth (export direction) | no |
 | [06-warp-get.yaml](06-warp-get.yaml) | Job: **download** bandwidth (restore direction) | no |
 | [07-warp-mixed.yaml](07-warp-mixed.yaml) | Job: GET/PUT/STAT/DELETE all at once | no |
+| [distributed-minio/](distributed-minio/) | **Optional follow-up:** how fast a *properly deployed* MinIO goes on the same hardware | no |
 
 The architecture is deliberately boring:
 
@@ -264,12 +265,18 @@ Throughput, split into 27 x 1s:
 
 1359 MiB/s ≈ **11.4 Gbit/s**, and look at how tight the spread is: 1355 to 1365 MiB/s over 27
 one-second slices. That flatness is the signature of a hard limit being hit cleanly, rather than a
-congested or throttled path — and the limit is identifiable: these are `Standard_D16s_v5` nodes,
-rated for up to 12.5 Gbit/s. We are measuring the node's network interface, at 91% of its spec.
+congested or throttled path.
 
-That is the kind of corroboration to look for. A number that lands just under a documented hardware
-or contractual limit is a number you can trust; a number with no explanation usually means something
-in the middle is shaping the traffic.
+> **A correction, kept deliberately.** This section used to identify that limit as the node's
+> network card, on the grounds that `Standard_D16s_v5` is rated for 12.5 Gbit/s and 1359 MiB/s is
+> 91% of it — and offered the agreement as evidence the number could be trusted. That was wrong. A
+> [properly deployed distributed MinIO](distributed-minio/) later read at **2603 MiB/s (21.8
+> Gbit/s)** from a single pod on one node, straight past the published figure. The NIC was never the
+> ceiling; this 1359 MiB/s was the limit of *one MinIO pod*.
+>
+> The mistake is more instructive than the fix: **a number that lands just under a documented limit
+> is seductive, not trustworthy.** The way to test that kind of hypothesis is to try to exceed the
+> limit, not to admire how well it agrees.
 
 Note the asymmetry: **1359 MiB/s down versus 136 MiB/s up**, a factor of 10 against the same
 endpoint. This is extremely common, and it is why you measure both directions. Sizing a restore
@@ -846,18 +853,28 @@ whole time.
 It goes further. [Step 5](#warning-step-5--understand-what-the-minio-number-is-and-is-not) measured
 1282 MiB/s with MinIO's data in RAM and called that "the real network reference". **AWS beat that
 too.** So that number was not the network either — it was MinIO itself, a single pod with its own
-CPU budget. The only honest network reference on this cluster is the hardware:
+CPU budget.
 
-| | MiB/s | Gbit/s | % of the `Standard_D16s_v5` 12.5 Gbit/s NIC |
-|---|---|---|---|
-| AWS S3 PUT, fastest 1 s slice | 1417 | 11.9 | **95%** |
-| AWS S3 PUT, average | 1338 | 11.2 | 90% |
-| MinIO GET cross-node | 1359 | 11.4 | 91% |
-| MinIO PUT, data in RAM (tmpfs) | 1281 | 10.7 | 86% |
-| MinIO PUT, data on node disk | 136 | 1.1 | 9% |
+| | MiB/s | Gbit/s |
+|---|---|---|
+| **Distributed MinIO GET** *(measured later, see below)* | **2603** | **21.8** |
+| AWS S3 PUT, fastest 1 s slice | 1417 | 11.9 |
+| MinIO GET cross-node, single pod | 1359 | 11.4 |
+| AWS S3 PUT, average | 1338 | 11.2 |
+| MinIO PUT, data in RAM (tmpfs), single pod | 1281 | 10.7 |
+| MinIO PUT, data on node disk, single pod | 136 | 1.1 |
+| *Azure's published figure for `Standard_D16s_v5`* | *~1490* | *12.5* |
 
-Uploading to AWS S3 from Paris **saturates the node's network card**. There is no cross-cloud
-penalty here worth designing around.
+The four middle rows cluster tightly around 1300–1400 MiB/s, which is why this document originally
+declared them all to be the node's network card saturating at ~90% of its rating. **That was wrong,
+and the top row is why:** a [distributed MinIO](distributed-minio/) later reached 21.8 Gbit/s from a
+single pod on one node. Each of those middle measurements had its own separate limit that happened
+to land in the same range — the single MinIO pod was bounded by being one pod, and AWS by something
+in its own path or in egress shaping.
+
+So there is no cross-cloud penalty worth designing around, and no evidence the NIC was ever the
+constraint. **Beware agreement between unrelated numbers**; it reads as corroboration and is often
+coincidence.
 
 #### Why proximity lost
 
@@ -883,13 +900,24 @@ That is, after all, what object storage *is for*. We accidentally demonstrated i
 
 "Cloud object storage beats on-prem." That is not what was measured. What was measured is *one
 MinIO pod writing to one Azure VM disk through an `emptyDir`* — a deliberately throw-away target
-built for validating YAML, not for storing data. A production MinIO (several nodes, NVMe,
-erasure-coded across devices) is an entirely different system and would be expected to saturate the
-same NIC.
+built for validating YAML, not for storing data.
 
-The real lesson is narrower and more useful: **a self-hosted S3 target has to be sized so that its
-aggregate device bandwidth matches your network, or the network will never be the thing you are
-measuring.** Ask your storage team for the spindle count and the per-node write bandwidth, not just
+We went and checked, rather than leaving that as an assertion. Deploying MinIO properly on the
+**same cluster and the same hardware** — 4 nodes, 16 Premium disks, erasure coded — gives:
+
+| | PUT | GET |
+|---|---|---|
+| Single pod on a node disk | 143 MiB/s | 1359 MiB/s |
+| [Distributed, tuned](distributed-minio/) | **1005 MiB/s** | **2603 MiB/s** |
+| AWS S3 `eu-west-3` | 1338 MiB/s | 717 MiB/s |
+
+Seven times the write throughput, and reads **3.6x faster than AWS**. The full experiment, including
+which levers mattered and which did nothing, is in
+[distributed-minio/](distributed-minio/).
+
+So the real lesson is narrower and more useful: **a self-hosted S3 target has to be sized so that
+its aggregate device bandwidth matches your network, or the network will never be the thing you are
+measuring.** Ask your storage team for the drive count and the per-node write bandwidth, not just
 the capacity. And either way: benchmark against the endpoint that will actually hold the backups,
 and treat every self-hosted reference as a floor rather than a ceiling.
 
@@ -964,7 +992,7 @@ number rather than a lucky sample.
 
 | What you observe | What it means | What to do |
 |---|---|---|
-| External throughput lands just under a documented NIC or contractual limit, with a **flat** per-second spread | You are measuring the hardware. Trust it. | Use it directly in the sizing formula. |
+| External throughput lands just under a documented NIC or contractual limit, with a **flat** per-second spread | Tempting to call it "the hardware", but published figures are often conservative and we got this wrong once already. Treat it as *a* ceiling, not *the* ceiling. | Use it for sizing, but try to exceed it before believing it — more streams, a second client pod, a faster endpoint. |
 | External throughput well below any known limit, **flat** spread | A bandwidth or egress-shaping ceiling somewhere in the path. | It is still your real bandwidth — design around it, and ask the network team what is shaping it. |
 | **Collapsing** spread (`Slowest` a fraction of `Fastest`) | Throttling that ramps in, a shared uplink, or a proxy in the middle. | Re-run with `DURATION=5m`; the 30 s number is optimistic. |
 | Throughput rises when you raise `CONCURRENT` | You had not filled the pipe — per-connection limit, as with the AWS GET above. | Keep raising until it plateaus, then use the plateau. |

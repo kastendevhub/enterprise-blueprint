@@ -1,0 +1,26 @@
+---
+# A dedicated StorageClass for the benchmark disks.
+#
+# The cluster's default "managed-csi" is already Premium_LRS, so the only
+# reason to define our own is cachingMode: None. The Azure disk CSI driver
+# defaults to ReadOnly host caching, which lets the VM serve reads out of the
+# host's cache -- the same flattering effect as the page cache we already hit
+# with the single-pod MinIO. With caching off, the numbers belong to the disks.
+#
+# Premium_LRS throughput scales with the disk SIZE, not just the count:
+#   P10  128 GiB  ~100 MBps   (burstable to ~170 MBps on credits)
+#   P15  256 GiB  ~125 MBps   (burstable)
+#   P20  512 GiB  ~150 MBps   (burstable)
+#   P30    1 TiB  ~200 MBps   (no bursting, sustained)
+# Small disks burst, which is a trap for short benchmarks: see the readme.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: warp-premium-nocache
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: Premium_LRS
+  cachingMode: None
+reclaimPolicy: Delete          # deleting the PVCs deletes the Azure disks
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
