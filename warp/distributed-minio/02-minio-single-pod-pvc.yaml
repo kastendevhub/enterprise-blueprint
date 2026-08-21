@@ -1,0 +1,87 @@
+---
+# CONTROL A: one MinIO pod, ONE Premium SSD PVC.
+#
+# Purpose: isolate the backing device from the topology. The main tutorial's
+# MinIO is also a single pod with a single drive, but on an emptyDir sitting on
+# the node's OS disk. Swapping that emptyDir for a dedicated Premium disk
+# changes exactly ONE variable, so the difference is attributable.
+#
+# Like the tutorial's MinIO this runs in single-drive mode (one path passed to
+# "minio server"), so there is no erasure coding and no write amplification.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-1disk-data
+  namespace: warp
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: warp-premium-nocache
+  resources:
+    requests:
+      # 512 GiB = Premium P20 ~150 MBps, chosen to match the throughput class
+      # of the node OS disk the emptyDir was living on, so the comparison is
+      # about "dedicated disk vs shared OS disk", not about disk size.
+      storage: 512Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-1disk
+  namespace: warp
+  labels:
+    app: minio-1disk
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # RWO volume: never let two pods contend for it
+  selector:
+    matchLabels:
+      app: minio-1disk
+  template:
+    metadata:
+      labels:
+        app: minio-1disk
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          args: ["server", "/data", "--console-address", ":9001"]
+          envFrom:
+            - secretRef:
+                name: minio-root
+          env:
+            - name: HOME
+              value: /tmp
+          ports:
+            - { name: s3, containerPort: 9000 }
+          readinessProbe:
+            httpGet: { path: /minio/health/ready, port: 9000 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits:   { cpu: "12", memory: 8Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-1disk-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-1disk
+  namespace: warp
+spec:
+  selector:
+    app: minio-1disk
+  ports:
+    - { name: s3, port: 9000, targetPort: 9000 }

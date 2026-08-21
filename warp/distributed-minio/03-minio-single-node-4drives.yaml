@@ -1,0 +1,123 @@
+---
+# CONTROL B: one MinIO pod, FOUR Premium SSD PVCs, all on the same node.
+#
+# Purpose: separate "more drives" from "more nodes". Each pod in the
+# distributed StatefulSet also has 4 drives, so this is that same pod count of
+# drives with the node count held at 1. If throughput here approaches the
+# distributed result, drive count was the lever; if it plateaus well below,
+# node count is doing the work -- because every extra node brings its own
+# per-VM disk throughput budget (~600 MBps on a Standard_D16s_v5).
+#
+# NOTE ON AMPLIFICATION: 4 drives means MinIO erasure codes with a default
+# parity of EC:2, i.e. 2 data + 2 parity = 2x write amplification. The
+# 16-drive distributed set defaults to EC:4, i.e. 12 data + 4 parity = 1.33x.
+# So this control is NOT amplification-neutral, and that has to be corrected
+# for when reading the result. See the readme.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: minio-4disk-d0, namespace: warp }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: warp-premium-nocache
+  resources: { requests: { storage: 512Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: minio-4disk-d1, namespace: warp }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: warp-premium-nocache
+  resources: { requests: { storage: 512Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: minio-4disk-d2, namespace: warp }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: warp-premium-nocache
+  resources: { requests: { storage: 512Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: minio-4disk-d3, namespace: warp }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: warp-premium-nocache
+  resources: { requests: { storage: 512Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-4disk
+  namespace: warp
+  labels:
+    app: minio-4disk
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio-4disk
+  template:
+    metadata:
+      labels:
+        app: minio-4disk
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          args:
+            - server
+            - /data-0
+            - /data-1
+            - /data-2
+            - /data-3
+            - --console-address
+            - ":9001"
+          envFrom:
+            - secretRef:
+                name: minio-root
+          env:
+            - name: HOME
+              value: /tmp
+            # Left empty = MinIO's default parity for a 4-drive set (EC:2).
+            - name: MINIO_STORAGE_CLASS_STANDARD
+              value: ""
+          ports:
+            - { name: s3, containerPort: 9000 }
+          readinessProbe:
+            httpGet: { path: /minio/health/ready, port: 9000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests: { cpu: "1", memory: 1Gi }
+            limits:   { cpu: "12", memory: 8Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: d0, mountPath: /data-0 }
+            - { name: d1, mountPath: /data-1 }
+            - { name: d2, mountPath: /data-2 }
+            - { name: d3, mountPath: /data-3 }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: d0, persistentVolumeClaim: { claimName: minio-4disk-d0 } }
+        - { name: d1, persistentVolumeClaim: { claimName: minio-4disk-d1 } }
+        - { name: d2, persistentVolumeClaim: { claimName: minio-4disk-d2 } }
+        - { name: d3, persistentVolumeClaim: { claimName: minio-4disk-d3 } }
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-4disk
+  namespace: warp
+spec:
+  selector:
+    app: minio-4disk
+  ports:
+    - { name: s3, port: 9000, targetPort: 9000 }

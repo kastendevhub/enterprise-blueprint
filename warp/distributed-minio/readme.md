@@ -44,6 +44,8 @@ graph TD
 |---|---|
 | [00-storageclass.yaml](00-storageclass.yaml) | Premium SSD class with host caching disabled |
 | [01-minio-distributed.yaml](01-minio-distributed.yaml) | Headless + client Services, StatefulSet |
+| [02-minio-single-pod-pvc.yaml](02-minio-single-pod-pvc.yaml) | Control A: 1 pod, 1 Premium disk |
+| [03-minio-single-node-4drives.yaml](03-minio-single-node-4drives.yaml) | Control B: 1 pod, 4 Premium disks, one node |
 
 ## Why a dedicated StorageClass
 
@@ -134,6 +136,96 @@ And reads, on the same topology:
 **Almost all of the win is in step 1 — just spreading across nodes and drives.** Going from one pod
 on one disk to 16 drives on 4 nodes is a 5.2x jump. Everything afterwards adds 37% combined. If you
 take one thing away: the topology matters far more than the tuning.
+
+But step 1 changes *two* things at once — pod count and the backing device — so on its own it does
+not prove topology is what mattered. That needed a separate control, below.
+
+# Is topology really the lever?
+
+Step 1 replaced one pod on an `emptyDir` with four pods on sixteen Premium disks. The gain could
+have come from the topology, or simply from moving off the node's OS disk onto dedicated Premium
+SSDs. Two more runs separate them, both with `OBJ_SIZE=64MiB`, `CONCURRENT=8`, `DURATION=30s`:
+
+| Control | Pods | Drives | Amplification | PUT | GET |
+|---|---|---|---|---|---|
+| **Baseline** — `emptyDir` on the node OS disk | 1 | 1 | 1x | 143 MiB/s | 1359 MiB/s |
+| **A** — one dedicated Premium P20 | 1 | 1 | 1x | **147.20 MiB/s** | — |
+| **B** — four Premium P20, *same* node | 1 | 4 | 2x | **263.05 MiB/s** | **1313.34 MiB/s** |
+| **Distributed** — 16 Premium P20, four nodes | 4 | 16 | 1.14x | 1005.43 MiB/s | 2603.26 MiB/s |
+
+[02-minio-single-pod-pvc.yaml](02-minio-single-pod-pvc.yaml) and
+[03-minio-single-node-4drives.yaml](03-minio-single-node-4drives.yaml) are those two controls.
+
+### The backing device was irrelevant
+
+**143 MiB/s on the OS disk, 147.20 MiB/s on a dedicated Premium P20.** A 2.9% difference, inside
+run-to-run noise, with a spread of 145.8–149.8 MiB/s and a request-time standard deviation of 24 ms
+— a textbook hard device limit.
+
+The reason is arithmetic: a 512 GiB Premium P20 is rated ~150 MBps ≈ 143 MiB/s, and the node's OS
+disk happened to be in the same throughput class. **One disk was the ceiling in both cases.** So
+none of the 5.2x came from switching to Premium storage, and the original conclusion survives the
+control.
+
+### Drives are a lever, but only up to one VM's budget
+
+Four drives on the same node took PUT from 147 to **263.05 MiB/s — 1.8x, not 4x.** The reason shows
+up when you convert to actual disk I/O, correcting for the 2x write amplification of a 4-drive
+EC:2 set:
+
+```
+263.05 MiB/s payload  x  2 (amplification)  =  526 MiB/s  =  552 MB/s of disk I/O
+```
+
+A `Standard_D16s_v5` is rated for ~600 MBps of uncached disk throughput, so that single node was at
+**92% of its VM-level disk budget** — saturated. Adding a fifth or sixteenth disk to that node
+would have achieved nothing. This is the ceiling that makes topology unavoidable.
+
+### So yes — node count is the real lever for writes
+
+Going from one node to four, at the same 4 drives per node, took PUT from 263.05 to
+**1005.43 MiB/s: 3.8x for 4x the nodes**, close to linear. Each additional node brings its own
+~600 MBps disk budget, and that is the only way past the per-VM cap.
+
+With one honest caveat, visible once you normalise for amplification again:
+
+| | Disk I/O achieved | Per node | % of the ~600 MBps VM cap |
+|---|---|---|---|
+| 1 node, 4 drives | 552 MB/s | 552 MB/s | **92%** |
+| 4 nodes, 16 drives | 1202 MB/s | 300 MB/s | **50%** |
+
+**Distributed MinIO extracts about half as much from each node as a single node does.** Four times
+the hardware bought 2.2x the disk I/O, roughly 55% scaling efficiency — the cost of erasure-coding
+shards across the network and coordinating them. Part of the headline 3.8x payload gain is not extra
+I/O at all but *better parity economics*: a 16-drive set at EC:2 wastes 1.14 bytes per byte stored
+where a 4-drive set at EC:2 wastes 2. Both effects are real benefits of more drives on more nodes;
+they are just not the same effect.
+
+### Reads never involved the disks at all
+
+**1359 MiB/s on one disk, 1313.34 MiB/s on four.** Quadrupling the drives changed reads by −3%.
+
+Those four P20s can supply ~600 MB/s of reads between them, yet the pod served 1313 MiB/s
+(~1377 MB/s) — more than twice what the disks can deliver. The reads were coming out of the page
+cache, which is available for reads even though MinIO's erasure-coded *writes* use `O_DIRECT` and
+bypass it.
+
+Adding *pods* is what moved reads: 1313 → 2603 MiB/s, about 2x for 4x the pods. This independently
+confirms the retraction in the next section — the ~1350 MiB/s plateau seen repeatedly in the main
+tutorial was **one MinIO pod's serving capacity**, not the node's network card. Two different
+backends, one and four disks, both land on ~1350; only adding pods breaks through it.
+
+## Summary: where the 7x comes from
+
+| Step | Multiplier | Why |
+|---|---|---|
+| Dedicated Premium disk instead of `emptyDir` | **1.03x** | Nothing. One disk is one disk. |
+| 1 → 4 drives on that node | **1.8x** | Real, until the ~600 MBps per-VM disk cap stops it at 92% |
+| 1 → 4 nodes at 4 drives each | **3.8x** | Each node adds its own disk budget; the only way past the cap |
+| Parity, CPU, host list, disk size | **1.37x** | Worthwhile tuning, none of it decisive |
+
+Topology is the lever. Not because pods are magic, but because **the per-VM disk throughput cap is
+the binding constraint, and nodes are the only way to buy more of it.**
 
 **Erasure coding parity is a real but modest lever (+6.3%).** With 16 drives MinIO defaults to
 `EC:4` — 12 data + 4 parity, so every byte written costs 1.33 bytes of disk I/O. `EC:2` gives
