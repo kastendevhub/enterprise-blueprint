@@ -1,0 +1,116 @@
+---
+# Throw-away credentials for the RustFS benchmark target.
+#
+# Deliberately the SAME key pair as the MinIO target's minio-root secret, so
+# switching the benchmark from one endpoint to the other needs only S3_ENDPOINT
+# patched in 02-s3-target.yaml -- no credential change, one fewer variable to
+# get wrong between two runs you intend to compare.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rustfs-root
+  namespace: warp
+type: Opaque
+stringData:
+  RUSTFS_ACCESS_KEY: minio
+  RUSTFS_SECRET_KEY: minio123
+---
+# CONDITION 1: one RustFS pod, emptyDir on the NODE'S DISK.
+#
+# This is the exact counterpart of ../01-minio.yaml -- same CPU and memory
+# limits, same emptyDir with the same sizeLimit, same single-drive mode. The
+# only thing that changes is the S3 implementation, which is the point.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs
+  namespace: warp
+  labels:
+    app: rustfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      containers:
+        - name: rustfs
+          image: rustfs/rustfs:latest
+          envFrom:
+            - secretRef:
+                name: rustfs-root
+          env:
+            # RUSTFS_VOLUMES is what the entrypoint passes to the binary as its
+            # positional argument. One path = single-drive mode, no erasure
+            # coding and no write amplification, matching how ../01-minio.yaml
+            # runs "minio server /data".
+            - name: RUSTFS_VOLUMES
+              value: /data
+            - name: RUSTFS_ADDRESS
+              value: ":9000"
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            # The image runs as UID 10001, but OpenShift's restricted-v2 SCC
+            # assigns a random UID instead. Both the log directory and HOME
+            # therefore have to sit on a writable volume, or the container dies
+            # before it opens a socket.
+            - name: RUSTFS_OBS_LOG_DIRECTORY
+              value: /data/logs
+            - name: HOME
+              value: /data
+          ports:
+            - name: s3
+              containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          # No "medium" => a directory on the NODE'S DISK. Patching this to
+          # "medium: Memory" is CONDITION 2; see the readme.
+          emptyDir:
+            sizeLimit: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: warp
+  labels:
+    app: rustfs
+spec:
+  selector:
+    app: rustfs
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000

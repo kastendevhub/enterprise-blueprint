@@ -1,0 +1,95 @@
+---
+# CONDITION 3: one RustFS pod, ONE Premium SSD PVC.
+#
+# Counterpart of ../distributed-minio/02-minio-single-pod-pvc.yaml, field for
+# field: same 512 GiB P20, same warp-premium-nocache class, same 12 CPU limit,
+# same single-drive mode. Isolates the backing device from the topology.
+#
+# Requires ../distributed-minio/00-storageclass.yaml to be applied first.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustfs-1disk-data
+  namespace: warp
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: warp-premium-nocache
+  resources:
+    requests:
+      # 512 GiB = Premium P20 ~150 MBps, the same throughput class as the node
+      # OS disk the emptyDir lives on, so the comparison is "dedicated disk vs
+      # shared OS disk" and not about disk size.
+      storage: 512Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs-1disk
+  namespace: warp
+  labels:
+    app: rustfs-1disk
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # RWO volume: never let two pods contend for it
+  selector:
+    matchLabels:
+      app: rustfs-1disk
+  template:
+    metadata:
+      labels:
+        app: rustfs-1disk
+    spec:
+      containers:
+        - name: rustfs
+          image: rustfs/rustfs:latest
+          envFrom:
+            - secretRef:
+                name: rustfs-root
+          env:
+            - name: RUSTFS_VOLUMES
+              value: /data
+            - name: RUSTFS_ADDRESS
+              value: ":9000"
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            # Logs go to the emptyDir, not to the PVC under measurement: log
+            # writes must not consume any of the disk bandwidth we are trying
+            # to attribute to S3 traffic.
+            - name: RUSTFS_OBS_LOG_DIRECTORY
+              value: /tmp/logs
+            - name: HOME
+              value: /tmp
+          ports:
+            - { name: s3, containerPort: 9000 }
+          readinessProbe:
+            httpGet: { path: /health, port: 9000 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits:   { cpu: "12", memory: 8Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustfs-1disk-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs-1disk
+  namespace: warp
+spec:
+  selector:
+    app: rustfs-1disk
+  ports:
+    - { name: s3, port: 9000, targetPort: 9000 }

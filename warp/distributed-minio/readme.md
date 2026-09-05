@@ -131,6 +131,14 @@ And reads, on the same topology:
 | Distributed, 16 x P10 | 1986.19 MiB/s |
 | Distributed, 16 x P20 | **2603.26 MiB/s** |
 
+> **The read figures in this table did not reproduce later.** Re-deploying this exact manifest for
+> the [RustFS comparison](../rustfs/readme.md#warning-the-minio-read-numbers-in-the-main-tutorial-did-not-reproduce)
+> gave **3283 MiB/s** at 16 x P10 — and **3965 MiB/s** once `CONCURRENT` was raised to 32 with more
+> client CPU, which is past the 16 x P20 figure here. The PUT number reproduced (762 against 743),
+> so the topology conclusions below stand; it is the reads that were understated. Most likely this
+> table was still client-limited at `CONCURRENT=8` with warp capped at 2 CPU. The lesson this page
+> already argues for applies to this page: **try to exceed your ceiling before believing it.**
+
 ## What the ladder says
 
 **Almost all of the win is in step 1 — just spreading across nodes and drives.** Going from one pod

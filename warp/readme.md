@@ -108,6 +108,7 @@ shared with production traffic, run it during a maintenance window, or cap it wi
 | [06-warp-get.yaml](06-warp-get.yaml) | Job: **download** bandwidth (restore direction) | no |
 | [07-warp-mixed.yaml](07-warp-mixed.yaml) | Job: GET/PUT/STAT/DELETE all at once | no |
 | [distributed-minio/](distributed-minio/) | **Optional follow-up:** how fast a *properly deployed* MinIO goes on the same hardware | no |
+| [rustfs/](rustfs/) | **Optional follow-up:** RustFS (Rust, S3-compatible) against MinIO across all four storage conditions | no |
 
 The architecture is deliberately boring:
 
@@ -277,6 +278,14 @@ congested or throttled path.
 > The mistake is more instructive than the fix: **a number that lands just under a documented limit
 > is seductive, not trustworthy.** The way to test that kind of hypothesis is to try to exceed the
 > limit, not to admire how well it agrees.
+
+> **This 1359 MiB/s did not reproduce later.** Re-running the identical cross-node GET while
+> building the [RustFS comparison](rustfs/readme.md#warning-the-minio-read-numbers-in-the-main-tutorial-did-not-reproduce)
+> gave **2655 MiB/s** (2628 and 2682 in two runs). The same-node 2718 MiB/s below reproduced to the
+> digit, and the PUT figures reproduced, so the rig is sound — it is specifically the cross-node
+> reads that came out ~1.6x higher. We did not establish why; `minio/minio:latest` moving between
+> sessions, page-cache warmth and cluster load are all candidates. Treat 1359 as a floor, and
+> re-measure your own baseline in the same session as whatever you compare it against.
 
 Note the asymmetry: **1359 MiB/s down versus 136 MiB/s up**, a factor of 10 against the same
 endpoint. This is extremely common, and it is why you measure both directions. Sizing a restore

@@ -1,0 +1,164 @@
+---
+# CONDITION 4: distributed RustFS -- 4 pods, one per node, 4 Premium disks each.
+#
+# Counterpart of ../distributed-minio/01-minio-distributed.yaml: same 4 x 4 =
+# 16 drive layout, same 128 GiB (P10) disks, same 4 CPU limit, same required
+# anti-affinity, reached through a ClusterIP Service. That matches step 1 of
+# the MinIO tuning ladder (742.87 MiB/s PUT), which is the row to compare
+# against -- the later ladder steps changed parity, CPU and disk size on top.
+#
+# Requires ../distributed-minio/00-storageclass.yaml to be applied first.
+#
+# Headless service: gives each pod a stable DNS name so the RustFS nodes can
+# find each other. publishNotReadyAddresses is required because the pods must
+# resolve each other BEFORE any of them can become ready.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs-hl
+  namespace: warp
+  labels:
+    app: rustfs-dist
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: rustfs-dist
+  ports:
+    - name: s3
+      port: 9000
+---
+# The S3 endpoint to point warp at.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs-dist
+  namespace: warp
+  labels:
+    app: rustfs-dist
+spec:
+  selector:
+    app: rustfs-dist
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rustfs-dist
+  namespace: warp
+spec:
+  serviceName: rustfs-hl
+  replicas: 4
+  podManagementPolicy: Parallel      # all 4 must come up together to form quorum
+  selector:
+    matchLabels:
+      app: rustfs-dist
+  template:
+    metadata:
+      labels:
+        app: rustfs-dist
+    spec:
+      # One RustFS per node, so each pod gets its own node's disk and network
+      # budget instead of 4 pods contending for one node's budget.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: rustfs-dist
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: rustfs
+          image: rustfs/rustfs:latest
+          envFrom:
+            - secretRef:
+                name: rustfs-root
+          env:
+            # Same {N...M} expansion syntax MinIO uses: 4 hosts x 4 drives =
+            # 16 drives in one erasure set.
+            - name: RUSTFS_VOLUMES
+              value: "http://rustfs-dist-{0...3}.rustfs-hl.warp.svc.cluster.local:9000/data-{0...3}"
+            - name: RUSTFS_ADDRESS
+              value: ":9000"
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            # Internode RPC authentication. RustFS derives this from the access
+            # keys, but warns and refuses to form a multi-node cluster when the
+            # keys are the shipped defaults. Set explicitly so the cluster does
+            # not depend on which credentials we happen to be using.
+            - name: RUSTFS_RPC_SECRET
+              value: "warp-benchmark-rpc-secret"
+            - name: RUSTFS_OBS_LOG_DIRECTORY
+              value: /tmp/logs
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: s3
+              containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - { name: data-0, mountPath: /data-0 }
+            - { name: data-1, mountPath: /data-1 }
+            - { name: data-2, mountPath: /data-2 }
+            - { name: data-3, mountPath: /data-3 }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  # 16 x 128 GiB Premium SSD. These bill for as long as they exist (~$0.45/hour
+  # for the set) -- see the teardown section in the readme.
+  volumeClaimTemplates:
+    - metadata:
+        name: data-0
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi
+    - metadata:
+        name: data-1
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi
+    - metadata:
+        name: data-2
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi
+    - metadata:
+        name: data-3
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: warp-premium-nocache
+        resources:
+          requests:
+            storage: 128Gi
