@@ -473,21 +473,84 @@ kopia-metadata-repository-2fs864hlsv    kasten-io           metadata    clusters
 …
 ```
 
-**1078 hours is 45 days.** This lab cluster stopped running maintenance at the end of July and
-nobody noticed — which is exactly the point of the check, and exactly how it goes in production.
+**1078 hours is 45 days.** Alarming at first glance — and, on this cluster, entirely normal. Which
+is the single most important thing to understand before you build an alert on this number.
 
-How to read `AGE_H`:
+## :warning: A large AGE_H is not a fault. Read it against repository activity
 
-| Age of the last successful run | Verdict |
+Maintenance is **driven by repository activity, not by a wall clock**. A repository that nothing
+writes to has nothing to compact and nothing to garbage collect, so no run is recorded and its
+timestamp stays frozen at whenever it was last used. That is the expected steady state of an idle
+repository, not a broken one.
+
+Here is the demonstration, captured live. Every policy on this cluster is either `@onDemand` or
+paused:
+
+```bash
+oc get policies.config.kio.kasten.io -n kasten-io -o json \
+| jq -r '.items[]|"\(.metadata.name)\tpaused=\(.spec.paused // false)\tfreq=\(.spec.frequency // "onDemand")"'
+```
+
+```
+basic-app-backup              paused=false  freq=@onDemand
+clusters-backup               paused=true   freq=@hourly
+cp4d-projects-backup-policy   paused=false  freq=@onDemand
+```
+
+Nothing had run since July, so nothing had been maintained since July. Then `basic-app-backup` was
+triggered by hand at 12:32, and maintenance on the two repositories it touches fired **within a
+minute**, unprompted:
+
+```
+restore point created   2026-09-08T12:32:48Z
+restore point created   2026-09-08T12:33:20Z
+MaintenanceRun          2026-09-08T12:33:38Z → 12:33:43Z   succeeded: true
+StorageScan             2026-09-08T12:34:08Z → 12:34:13Z   succeeded: true
+```
+
+Nothing was fixed in between. The scheduler was never wedged — the repositories were simply idle.
+The same query that read `1078` for those two repositories now reads `0`, while the other twenty
+still read `1078` because they are still idle.
+
+And idle here is literal: **20 of the 22 volumedata repositories hold no restore point at all**.
+
+```bash
+oc get storagerepositories -n kasten-io -o json \
+  | jq -r '.items[]|select(.status.contentType=="volumedata")|.status.appName' | sort > /tmp/repoapps
+oc get restorepoints.apps.kio.kasten.io -A --no-headers | awk '{print $1}' | sort -u > /tmp/rpapps
+echo "repositories: $(wc -l < /tmp/repoapps)   with restore points: $(wc -l < /tmp/rpapps)   empty: $(comm -23 /tmp/repoapps /tmp/rpapps | wc -l)"
+```
+
+```
+repositories: 22   with restore points: 4   empty: 20
+```
+
+`klusterlet-guest1` is one of the twenty, and the bucket agrees — its prefix contains Kopia's
+housekeeping blobs and **not a single `p` pack blob** (see the listing in 4.4). There is no data
+left in it to maintain.
+
+So read `AGE_H` in context, never on its own:
+
+| Situation | Verdict |
 |---|---|
-| under ~24 h | healthy |
-| 24 h – 72 h | suspicious — look at the failed runs and the logs |
-| over 72 h, or `NEVER` | broken — the repository is no longer being compacted or garbage collected |
-| any age, with `DISABLED = true` | someone turned it off on purpose. Was that on purpose? |
+| Recent exports to this repository, `AGE_H` under ~24 h | healthy |
+| **Recent exports**, `AGE_H` climbing past ~72 h | **investigate** — this is the real fault signal |
+| No recent exports, large `AGE_H` | expected. Idle repository, nothing to do |
+| No restore points at all | empty shell from an expired or deleted application. Candidate for cleanup, not for an alert |
+| `DISABLED = true` | someone turned it off on purpose. Was that on purpose? |
 
-## Why the *age* is the signal, not the `succeeded` flag
+The useful alert is therefore a **join**, not a threshold: page when a repository that received an
+export in the last 24 h has not recorded a successful `MaintenanceRun` since. Alerting on `AGE_H`
+alone would have fired twenty times on this cluster and been wrong every time.
 
-On the cluster above, every single retained run has `succeeded: true`. There is not one failure to
+> The exact lifecycle of a repository once its last restore point expires — how much is garbage
+> collected and when the `StorageRepository` object itself goes away — is not something this page
+> establishes. What is established is the part that matters for monitoring: idle repositories stop
+> recording maintenance runs, and that is not a fault.
+
+## The `succeeded` flag alone is not enough either
+
+On the idle cluster, every single retained run has `succeeded: true`. There is not one failure to
 find:
 
 ```bash
@@ -509,10 +572,16 @@ oc get storagerepositories -n kasten-io -o json \
 
 (columns: last run of any kind, repository, failed runs retained, total runs ever)
 
-Zero failures everywhere, and yet nothing has run for a month and a half. When maintenance stops
-because the component that schedules it is wedged, it does not *fail* — it simply stops writing
-results, and the last thing recorded stays green forever. **A dashboard that alerts on
-`succeeded == false` would be silent here.** Alert on the age of the newest entry instead.
+Zero failures everywhere, and yet nothing had run for a month and a half. Whether the cause is a
+genuinely wedged scheduler or simply an idle repository, the shape in the API is identical: no new
+entries are written, and the last thing recorded stays green forever. **A dashboard that alerts on
+`succeeded == false` is silent in both cases.**
+
+That is why neither field works on its own. `succeeded` tells you how the last run went; `endTime`
+tells you when it was; only the **export activity of the repository** tells you whether another run
+should have happened by now. Note also that `MaintenanceRun` is not the only procedure recorded —
+`StorageScan` appears in the same list — so keep the `select(.procedure == "MaintenanceRun")` filter
+in every query above rather than taking the newest entry of any kind.
 
 ## Restrict it to one namespace, both repository kinds
 
@@ -742,15 +811,29 @@ gap**". Line the two up:
 | 2026-08-25 02:19 | `crypto-svc` pod recreated, repository manager initialised cleanly |
 | 2026-08-25 → 09-04 | **10 days, everything healthy, still no maintenance** |
 | 2026-09-04 06:57 | repository stream breaks on a node reboot |
+| 2026-09-08 12:32 | `basic-app-backup` triggered by hand → **maintenance runs 50 seconds later** |
 
-The ten healthy days in the middle rule out both logged errors as the cause: maintenance was already
-45 days stale before the stream ever broke, and it did not resume during the window when nothing was
-wrong. Whatever stopped it happened before this pod existed, and its logs are gone.
+The ten healthy days in the middle rule out both logged errors as the cause, and the last line rules
+out a fault altogether: nothing was repaired between 09-04 and 09-08, yet maintenance ran the moment
+a policy did. The gap was **an idle cluster**, not a broken one — every policy was on-demand or
+paused, so no export touched a repository for six weeks.
 
-That is the honest end state of a log-only investigation, and it is worth stating plainly rather
-than pinning the blame on the first red line you find. When you get here, the remaining moves are to
-restart the `crypto-svc` pod and watch whether `MaintenanceRun` entries reappear within a day, and
-to open a support case with a `k10tools debug logs` bundle.
+The lesson generalises past this cluster. Both red lines in the log were real, both were transient
+restart artefacts, and neither had anything to do with the symptom that started the investigation.
+Before reading a single log line, ask the cheap question first:
+
+```bash
+# has anything actually been written to this repository lately?
+oc get restorepoints.apps.kio.kasten.io -A --sort-by=.metadata.creationTimestamp | tail -5
+oc get policies.config.kio.kasten.io -n kasten-io -o json \
+  | jq -r '.items[]|"\(.metadata.name)\tpaused=\(.spec.paused // false)\tfreq=\(.spec.frequency // "onDemand")"'
+```
+
+If the answer is "nothing since July, and every policy is paused or on-demand", you are done — there
+is no fault to find, and the rest of this section is not the tool you need. Only when a repository is
+**actively receiving exports** and still not recording `MaintenanceRun` entries do the logs below
+become worth reading; at that point the remaining moves are to restart the `crypto-svc` pod and watch
+whether entries reappear, and to open a support case with a `k10tools debug logs` bundle.
 
 Do not forget the boring one either — if the API itself is unhealthy you are reading stale or empty
 data:
