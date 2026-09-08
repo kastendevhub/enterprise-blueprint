@@ -647,7 +647,11 @@ oc get storagerepositories "$REPO" -n kasten-io -o jsonpath='{.status.storageUsa
 
 Both are empty on repositories that have never completed a run.
 
-# Step 4 — when it is stale, where to look
+# Step 4 — when a *busy* repository is behind, where to look
+
+Only enter this section once Step 3 has shown you a repository that is **receiving exports** and
+still not recording successful `MaintenanceRun` entries. A stale timestamp on an idle repository is
+normal and needs nothing from this page.
 
 ## 4.1 Is it disabled?
 
