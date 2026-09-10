@@ -97,5 +97,12 @@ spec:
             summary: "A kasten service is down"
             description: "The kasten service {{ $labels.service }} is down."
             runbook_url: "https://docs.kasten.io/latest/operating/support.html"
-
+        - alert: kasten-full-maintenance-failed
+          annotations:
+            description: 'Full repository maintenance failed for repository {{ $labels.repo_name }}. Check details with: kubectl get --raw /apis/repositories.kio.kasten.io/v1alpha1/namespaces/kasten-io/storagerepositories/{{ $labels.repo_name }}/details'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
+            summary: Full repository maintenance failed
+          expr: 'increase(repository_data_procedure_total{status!="success",operation="maintenance_full"}[1h]) > 0'
+          labels:
+            severity: critical
  
