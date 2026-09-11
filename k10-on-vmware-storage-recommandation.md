@@ -9,9 +9,7 @@ unconstrained configuration — and make the remaining drift *reliably detectabl
 > outlive every object that references them, combined with retention settings that keep local
 > snapshots alive. Constrain the architecture and the problem largely disappears; the residual drift
 > becomes trivially detectable instead of a forensic exercise.
->
-> For the full analysis of the failure modes — including the ones this guide is designed to
-> prevent — see the companion document `feature-request-orphaned-fcd-cleanup.md`.
+
 
 ---
 
