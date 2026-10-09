@@ -161,6 +161,8 @@ Every export in this mode creates a full-size clone FCD, uses it, and deletes it
 create/delete churn on the CSI path — and every one of those operations is a chance to leave a
 partial artifact (B.5). **Configuring an Infrastructure Profile eliminates the clone entirely**
 (R2), because FCD-native and Hybrid modes read data directly from vSphere via VDDK.
+If you stay in this mode, limit how many clones exist at once (R7) and keep enough free space for
+them (R8).
 
 ### B.5 Partial volume creation under load
 
@@ -429,7 +431,7 @@ open.
   policy covering hundreds of volumes.
 - Stagger start times so bursts do not overlap across policies.
 - Review K10's concurrency settings and confirm the effective limit is appropriate for your vCenter
-  rather than left at an unbounded default.
+  rather than left at an unbounded default (see R7).
 - Watch for the signature in CSI sidecar logs during backup windows:
   ```bash
   kubectl logs -n vmware-system-csi deploy/vsphere-csi-controller -c csi-provisioner \
@@ -477,6 +479,37 @@ backups**; it is a deliberate trade, not a tidy-up.
   should normally return nothing, which makes them useful signals rather than noisy reports.
 - Alert on `Released` PVs so they are investigated rather than discovered by someone improvising.
 - Alert on CSI sidecar timeouts during backup windows (R4).
+
+### R7. Limit export concurrency in Kasten
+
+In CSI VolumeSnapshot mode (B.4), every export in flight holds a temporary full-size clone on the
+datastore. Use the Kasten limiter settings so fewer clones exist at once, and spread policies over
+time (R4), so that the in-flight clones never add up to more than the datastore's free space.
+
+As a starting point:
+
+```bash
+helm upgrade k10 kasten/k10 -n kasten-io --reuse-values \
+  --set limiter.snapshotExportsPerAction=1 \
+  --set limiter.snapshotExportsPerCluster=1
+```
+
+This does not affect consistency. The snapshots are still taken together; only their export is
+serialised.
+
+**Trade-off.** Backups take longer, because exports run one after another. Check that the backup
+window still fits once the policies are serialised, and raise the limits step by step if the
+datastore has room. This setting reduces peak consumption but does not guarantee it fits, so you
+still need R8.
+
+### R8. Keep enough free space on the datastore
+
+The datastore needs room for the largest set of clones that can run at the same time, plus a safety
+margin. With R7 at the values above, that is the largest single PVC being exported. With higher
+limits, it is the sum of the largest PVCs that can be exported at once across all running
+policies.
+
+Size the R6 free-space alert against this figure, not only against live PVC usage.
 
 ---
 
@@ -689,6 +722,8 @@ govc disk.ls -L "${ID}"            # expect: not found
 | **R4** | Bound policy fan-out | Reduces partial-creation orphans (B.5); bounds peak snapshot footprint under R3 |
 | **R5** | Never force-delete a `Released` PV | Prevents the one irreversible mistake (B.2) |
 | **R6** | Monitor and run D.1/D.2 on a schedule | Catches residual drift (B.5, B.6) while it is still traceable |
+| **R7** | Limit export concurrency (`limiter.snapshotExportsPerAction=1`, `limiter.snapshotExportsPerCluster=1`) | Bounds the number of temporary clones on the datastore at once (B.4); longer backups |
+| **R8** | Keep free space for the largest set of concurrent clones plus a margin | Prevents the datastore filling during exports (B.4) |
 
 **R1 and R3 are the two that matter most** — and notably neither depends on R2, which is the only
 recommendation here that an external constraint (hypervisor network access, an RTO SLA, or a Tanzu
