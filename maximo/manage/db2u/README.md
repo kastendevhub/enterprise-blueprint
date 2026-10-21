@@ -200,7 +200,11 @@ The blueprint take care of backing up the database and the encrytion key in the 
 
 ### On the destination cluster 
 
-Scaled down manages namespaces.
+Manage connects to the database and Core holds the JDBC configuration of Manage (`JdbcCfg`), so scale down both the 
+`mas-<instance>-manage` and the `mas-<instance>-core` namespaces before you touch the database.
+
+The operators of Core and Manage run as deployments in their own namespace. Once a namespace is entirely scaled down, its operator 
+is scaled down too, so no deployment (operator or not) comes back until you scale it back manually at the end of this procedure.
 
 > **If you are doing a cross instance restore**
 > Before you scale down the namespace set `autoGenerateEncryptionKeys: false` in the ManageWorkspace spec so the operator won't
@@ -214,17 +218,21 @@ Scaled down manages namespaces.
 
 ```bash
 kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read NAME; do
-  MANAGE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
-  MANAGE_NS=mas-$MANAGE-manage
-  echo "Scaling down Maximo namespace: $MANAGE_NS"
-  kubectl scale deployment --all -n "$MANAGE_NS" --replicas=0
-  echo "Waiting 300s for all pods in $MANAGE_NS to terminate."
-  sleep 5
-  kubectl delete pod --all -n "$MANAGE_NS"
-  kubectl wait pod --all -n "$MANAGE_NS" --for=delete --timeout=300s 2>/dev/null || true
-  echo "Pods in $MANAGE_NS terminated."
+  INSTANCE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
+  for NS in mas-$INSTANCE-manage mas-$INSTANCE-core; do
+    echo "Saving replicas and scaling down namespace: $NS"
+    kubectl get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
+    kubectl scale deployment --all -n "$NS" --replicas=0
+    echo "Waiting up to 300s for all pods in $NS to terminate."
+    sleep 5
+    kubectl delete pod --all -n "$NS"
+    kubectl wait pod --all -n "$NS" --for=delete --timeout=300s 2>/dev/null || true
+    echo "Pods in $NS terminated."
+  done
 done
 ```
+
+Keep the `<namespace>-replicas.txt` files, you need them to scale back up.
 
 > **If you are doing a cross instance restore**
 > Restore the secret `<workspaceid>-manage-encryptionsecret` in the manage namespaces with Kasten 
@@ -291,22 +299,48 @@ TIMESTAMP=$(su - db2inst1 -c "ls $BACKUP_DIR/BLUDB.*.001 | sort | tail -1 | xarg
 
 Now restore 
 ```bash
-su - db2inst1 "db2 force application all"
-su - db2inst1 "db2 terminate"
-su - db2inst1 "db2 deactivate db bludb"
+su - db2inst1 -c "db2 force application all"
+su - db2inst1 -c "db2 terminate"
+su - db2inst1 -c "db2 deactivate db bludb"
 su - db2inst1 -c "db2 restore db bludb from $BACKUP_DIR taken at $TIMESTAMP replace existing without prompting"
-su - db2inst1 "db2 rollforward db bludb to end of logs and complete"
+su - db2inst1 -c "db2 rollforward db bludb to end of logs and complete"
 ```
 
-scale up the manage namespaces 
+scale up the core and manage namespaces, core first, to their original number of replicas
 ```bash
 kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read NAME; do
-  MANAGE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
-  MANAGE_NS=mas-$MANAGE-manage
-  echo "Scaling up Maximo namespace: $MANAGE_NS"
-  kubectl scale deployment --all -n "$MANAGE_NS" --replicas=1  
+  INSTANCE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
+  for NS in mas-$INSTANCE-core mas-$INSTANCE-manage; do
+    echo "Scaling up namespace: $NS"
+    while read DEPLOY REPLICAS; do
+      kubectl scale deployment "$DEPLOY" -n "$NS" --replicas="$REPLICAS"
+    done < "$NS-replicas.txt"
+  done
 done
 ```
+
+> **Full DR or cross cluster restore: compare the top objects, do not change them**
+> On the destination cluster Maximo has been reinstalled, and its top objects were generated for this cluster. 
+> Check that they are in the same state as on the source cluster, but do not restore or modify them from the source backup. 
+> This is especially true for the `JdbcCfg` in `mas-<instance>-core`: it carries the DB2u certificate and credentials of the 
+> destination cluster, restoring the source one would break the connection between Manage and DB2u.
+> ```bash
+> kubectl get suite -n mas-${MAS_INSTANCE_ID}-core -o yaml | yq '.items[] | {"kind": .kind, "name": .metadata.name, "spec": .spec}'
+> kubectl get jdbccfg -n mas-${MAS_INSTANCE_ID}-core -o yaml | yq '.items[] | {"kind": .kind, "name": .metadata.name, "spec": .spec}'
+> kubectl get manageworkspace,managedeployment,managebuild -n mas-${MAS_INSTANCE_ID}-manage -o yaml | yq '.items[] | {"kind": .kind, "name": .metadata.name, "spec": .spec}'
+> ```
+> The certificates and credentials are expected to differ, compare the rest (URL, database name, schema, workspace binding...).
+
+## Secrets and configuration impacted by the restore
+
+| Object | Where | Same cluster restore | Cross cluster / full DR restore |
+|---|---|---|---|
+| Database content (BLUDB) | `c-<name>-backup` PVC in `db2u` | restored from the backup image | restored from the backup image |
+| DB2 native encryption keystore (`keystore.p12` / `keystore.sth`) | `c-<name>-meta` PVC in `db2u` | untouched | source key imported next to the destination key |
+| DB2u SSL keystore (`bludb_ssl.kdb`) | `c-<name>-meta` PVC in `db2u` | untouched | untouched, it must match the certificate issued by cert-manager on the destination |
+| `<workspaceid>-manage-encryptionsecret` | `mas-<instance>-manage` | untouched | restored from the source with Kasten |
+| `autoGenerateEncryptionKeys` in ManageWorkspace | `mas-<instance>-manage` | untouched | set to `false` before the scale down |
+| `JdbcCfg` and its credentials secret | `mas-<instance>-core` | untouched | untouched, compare only |
 
 ---
 

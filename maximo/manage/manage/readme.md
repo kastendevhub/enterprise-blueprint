@@ -68,6 +68,16 @@ Do not select the pods or the CertificateRequests if they are present in the res
 
 If the PVCs are backed up by VBR, there are no PVCs in the restore point: see [If you manage the backup of the PVCs with VBR](#if-you-manage-the-backup-of-the-pvcs-with-vbr).
 
+> **Note — full DR case:** in a [full DR](../../full-dr/full-dr.md), Maximo is reinstalled on the DR cluster, so the top objects 
+> ManageWorkspace, ManageDeployment and ManageBuild already exist. You don't need to restore them, but you must check that they are 
+> in the same state as on the source cluster (same version, same components, same settings), for instance by comparing their spec on both clusters:
+>
+> ```
+> oc get manageworkspace,managedeployment,managebuild -n mas-${MAS_INSTANCE_ID}-manage -o yaml | yq '.items[] | {"kind": .kind, "name": .metadata.name, "spec": .spec}'
+> ```
+>
+> If they differ, fix the DR install before you go further. Then, in this step, restore only the PVCs (if Kasten backs them up) and continue with the scale up.
+
 ## Step 4: scale up the deployments
 
 Scale the deployments back to their original number of replicas:
