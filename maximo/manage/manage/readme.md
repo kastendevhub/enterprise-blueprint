@@ -32,16 +32,54 @@ you know in which VBR backup you need to restore the files. You can easily save 
  
 # Restore
 
-First restore only the top objects ManageWorkspace, ManageDeployment, ManageBuild  with "overwrite existing". This will ensure a consistent reconciliation when reconciliation will start. 
+Only the top objects (ManageWorkspace, ManageDeployment, ManageBuild) and, if Kasten backs them up, the PVCs need to be restored. 
+All the other resources of the namespace are derived from the top objects and will be recreated by the operator during reconciliation.
 
-But the reconciliation is a long process (involving the rebuild of all the images), in order to get back quickly the application 
-scale down all the deployments in the manage namespace 
+## Step 1: scale down all the deployments
+
+Save the current number of replicas, then scale down all the deployments in the manage namespace, so that no pod is using the PVCs 
+or connected to the database when they are restored:
 
 ```
+oc get deployment -n mas-${MAS_INSTANCE_ID}-manage -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > manage-replicas.txt
 oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
 ```
 
-Then restore with "overwrite existing" and unselect the pod and certificateRequest resource if it is present in the restore point. 
+## Step 2 (optional): restore the database
+
+If you want the state of Manage to be in sync with the restore point (for instance the files in the PVCs must match the records in the database), 
+restore the database now, while Manage is scaled down and cannot reach it, from a restore point taken at the same time:
+
+- If Manage uses DB2u, restore the db2u namespace as explained in the [db2u guide](../db2u/README.md#restore-steps).
+- If Manage uses an external database, restore it with the tools of this database.
+
+If you only want to get back the Manage namespace and keep the current database, skip this step.
+
+## Step 3: restore the top objects (and the PVCs if Kasten backs them up)
+
+Restore only the top objects ManageWorkspace, ManageDeployment, ManageBuild with "overwrite existing". This will ensure a consistent reconciliation when reconciliation will start. 
+
+**If Kasten is responsible for the backup of the PVCs, you must also select all the PVCs in this restore**, together with the top objects. 
+Kasten restores the volumes before the other resources, so the PVCs will be in place with their data when the operator starts reconciling 
+the top objects. If you don't, the operator will create new, empty PVCs with the same names and mount them in the pods it creates. 
+Restoring the data later would mean replacing PVCs that are already bound and in use, which is harder and less reliable.
+
+Do not select the pods or the CertificateRequests if they are present in the restore point.
+
+If the PVCs are backed up by VBR, there are no PVCs in the restore point: see [If you manage the backup of the PVCs with VBR](#if-you-manage-the-backup-of-the-pvcs-with-vbr).
+
+## Step 4: scale up the deployments
+
+Scale the deployments back to their original number of replicas:
+
+```
+while read name replicas; do
+  oc scale --replicas $replicas deployment $name -n mas-${MAS_INSTANCE_ID}-manage
+done < manage-replicas.txt
+```
+
+The operator then reconciles the top objects and recreates all the derived resources. The reconciliation is a long process 
+(it involves the rebuild of all the images), so wait until the ManageWorkspace and ManageDeployment are ready before checking the application.
 
 ## If you manage the backup of the PVCs with VBR 
 
