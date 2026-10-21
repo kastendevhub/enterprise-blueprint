@@ -67,39 +67,123 @@ This is precisely why the DB2U restore blueprint **does not restore the `bludb_s
 
 > **Rule of thumb:** cert-manager state is a function of which operators are running, not of what data is in the databases. Because the reinstall recreates the operators, the operators recreate the cert-manager state correctly. Restoring cert-manager is only necessary for a pure Kasten "restore everything" approach — which is explicitly not the strategy used here.
 
-## 2. Scale down the manage namespace
+## 2. Prepare the DR cluster
 
-- Before you scale down the namespace set `autoGenerateEncryptionKeys: false` in the ManageWorkspace spec so the operator won't
-   overwrite the encryption key that you will restore.
-   ```bash
-   kubectl patch manageworkspace <instanceid>-<workspaceid> \
-     -n mas-instance1-manage --type merge \
-     -p '{"spec":{"settings":{"deployment":{"autoGenerateEncryptionKeys":false}}}}'
-   ```
-- Scale down the manage namespace by scaling down all the deployment to zero 
-- Restore the secret `<workspaceid>-manage-encryptionsecret` with Kasten 
-- Restore the PVC with Kasten 
-- Keep the manage namespace scaled down until you restore the manage database (whether it's db2u or an external database)
+Set the variables used in the rest of this document. They must be the same as on the source cluster:
 
-## 3. Restore MongoCE database
+```bash
+MAS_INSTANCE_ID=instance1
+MAS_WORKSPACE_ID=workspace1
+```
 
-Follow the restore procedure described in the [mongoce](./mongoce/)
+On the DR cluster:
+- Deploy the [MongoCE blueprint](../mongoce/readme.md#install-and-execute-the-blueprint) and the [DB2u blueprint and its binding](../manage/db2u/README.md#deploying-the-blueprint).
+- **Create the `mas-instance-id` configmap in the `mongoce` namespace.** The reinstall does not create it, and we never restore it 
+  because only the MongoCE backup PVC is restored. The MongoCE restore hook reads this configmap **on the DR cluster at restore time**:
+  - only the instances listed in the configmap are restored, use it to restore a subset of your instances;
+  - every instance listed must have a dump in the backup, the dumps were created from the list of the configmap on the source cluster 
+    at backup time. If you list an instance that was not in the source configmap, `mongorestore` fails on a missing archive.
+  ```bash
+  oc create configmap -n mongoce mas-instance-id --from-literal mas-instance-id=${MAS_INSTANCE_ID}
+  ```
 
-## 4. Restore the manage database 
+## 3. Compare the top objects, do not restore them
 
-If you're using DB2U (built in database for manage) follow the [DB2U restore guide](./manage/db2u/). 
+Maximo has been reinstalled, the top objects already exist on the DR cluster and were generated for this cluster. Check that they are 
+in the same state as on the source cluster (same version, same components, same settings), but do not restore or modify them from the 
+source backup. Run these commands on both clusters and compare:
 
-If you're not using DB2U database but an external database, restore the external database with the backup of the production database.
+```bash
+oc get suite -n mas-${MAS_INSTANCE_ID}-core -o yaml | yq '.items[] | {"kind": .kind, "name": .metadata.name, "spec": .spec}'
+oc get jdbccfg -n mas-${MAS_INSTANCE_ID}-core -o yaml | yq '.items[] | {"kind": .kind, "name": .metadata.name, "spec": .spec}'
+oc get manageworkspace,managedeployment,managebuild -n mas-${MAS_INSTANCE_ID}-manage -o yaml | yq '.items[] | {"kind": .kind, "name": .metadata.name, "spec": .spec}'
+```
 
-## 5. Scale up the manage namespace 
+This is especially true for the `JdbcCfg`: it carries the DB2u certificate and credentials of the DR cluster, restoring the source 
+one would break the connection between Manage and DB2u. Certificates and credentials are expected to differ, compare the rest 
+(URL, database name, schema, workspace binding...).
 
-Now you're ready to restart, scale up the manage namespace by scaling up all the deployments. 
+If they differ, fix the DR install before you go further.
 
-This will trigger a reconciliation and check that the ManageWorkspace reaches `Ready`:
+## 4. Disable the generation of the encryption keys
+
+This is the only change you make to a top object. Set `autoGenerateEncryptionKeys: false` in the ManageWorkspace spec so the operator 
+won't overwrite the encryption key that you will restore:
+
+```bash
+oc patch manageworkspace ${MAS_INSTANCE_ID}-${MAS_WORKSPACE_ID} \
+  -n mas-${MAS_INSTANCE_ID}-manage --type merge \
+  -p '{"spec":{"settings":{"deployment":{"autoGenerateEncryptionKeys":false}}}}'
+```
+
+## 5. Scale down Manage, then Core
+
+Manage depends on Core (Suite, `JdbcCfg`, license) and on DB2u, Core depends on MongoCE. Stop them from the top of the chain: Manage 
+first, then Core, before you restore any database. 
+
+The operators of Core and Manage run as deployments in their own namespace, once a namespace is entirely scaled down its operator is 
+scaled down too, and no deployment comes back until you scale it back manually in [step 9](#9-scale-up-core-then-manage).
+
+Save the number of replicas first. The file is not overwritten if it already exists, so that running this again on a namespace already 
+scaled down does not save zeros:
+
+```bash
+for NS in mas-${MAS_INSTANCE_ID}-manage mas-${MAS_INSTANCE_ID}-core; do
+  [ -f "$NS-replicas.txt" ] || oc get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
+  oc scale deployment --all -n "$NS" --replicas=0
+  oc wait pod --all -n "$NS" --for=delete --timeout=300s 2>/dev/null || true
+done
+```
+
+Keep `ibm-sls` running: its own MongoDB database is not part of the MongoCE restore and it was registered during the reinstall.
+
+## 6. Restore the Manage encryption secret and PVCs
+
+From the restore point of the `mas-${MAS_INSTANCE_ID}-manage` namespace, with "overwrite existing", select only:
+- the secret `${MAS_WORKSPACE_ID}-manage-encryptionsecret`;
+- the PVCs, if Kasten is responsible for their backup. If the PVCs are backed up by VBR, restore the files with VBR 
+  (see [Manage restore](../manage/manage/readme.md#if-you-manage-the-backup-of-the-pvcs-with-vbr)).
+
+Do not restore any other resource of the namespace.
+
+## 7. Restore the MongoCE database
+
+Follow the [MongoCE restore procedure](../mongoce/readme.md#restoring): configure the post restore hook and restore only the 
+`mongoce-backup-pvc`. 
+
+For each instance listed in the `mas-instance-id` configmap, the hook drops and restores `mas_<instance>_core` and 
+`mas_<instance>_catalog`. It keeps the `OauthClient` collection of the DR cluster, so the client secrets created by the reinstall 
+remain valid.
+
+## 8. Restore the Manage database
+
+If you're using DB2U (built in database for Manage) follow the [DB2U restore guide](../manage/db2u/README.md#on-the-destination-cluster), 
+cross instance case, **but skip its scale down and scale up of the Core and Manage namespaces**, they are already scaled down 
+and you will scale them up in the next step. Run only the DB2u part: scale down DB2u, import the backup PVC, scale up DB2u, 
+import the source encryption key, restore and rollforward.
+
+If you're not using DB2U but an external database, restore the external database with the backup of the production database.
+
+## 9. Scale up Core, then Manage
+
+Start from the bottom of the chain: Core first, wait for the Suite to be ready, then Manage. Use the replicas saved in step 5:
+
+```bash
+NS=mas-${MAS_INSTANCE_ID}-core
+while read DEPLOY REPLICAS; do oc scale deployment "$DEPLOY" -n "$NS" --replicas="$REPLICAS"; done < "$NS-replicas.txt"
+oc wait suite --all -n "$NS" --for=condition=Ready --timeout=1800s
+
+NS=mas-${MAS_INSTANCE_ID}-manage
+while read DEPLOY REPLICAS; do oc scale deployment "$DEPLOY" -n "$NS" --replicas="$REPLICAS"; done < "$NS-replicas.txt"
+```
+
+Once Manage is `Ready` (see below), delete the `*-replicas.txt` files, otherwise a future restore would reuse these old counts.
+
+This triggers a reconciliation. Check that the ManageWorkspace reaches `Ready`:
 
 ```bash
 # Snapshot of all conditions — run at any time to see current state
-kubectl get manageworkspace instance1-workspace1 -n mas-instance1-manage \
+kubectl get manageworkspace ${MAS_INSTANCE_ID}-${MAS_WORKSPACE_ID} -n mas-${MAS_INSTANCE_ID}-manage \
   -o jsonpath='{range .status.conditions[*]}{.type}{"\t"}{.reason}{"\t"}{.message}{"\n"}{end}' \
   | column -t -s $'\t'
 ```
@@ -123,9 +207,9 @@ The two fields to watch are:
 To **watch** until `Ready` transitions to `True`:
 
 ```bash
-until kubectl get manageworkspace instance1-workspace1 -n mas-instance1-manage \
+until kubectl get manageworkspace ${MAS_INSTANCE_ID}-${MAS_WORKSPACE_ID} -n mas-${MAS_INSTANCE_ID}-manage \
   -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}' | grep -q "^Ready$"; do
-  STATUS=$(kubectl get manageworkspace instance1-workspace1 -n mas-instance1-manage \
+  STATUS=$(kubectl get manageworkspace ${MAS_INSTANCE_ID}-${MAS_WORKSPACE_ID} -n mas-${MAS_INSTANCE_ID}-manage \
     -o jsonpath='{.status.conditions[?(@.type=="DeploymentCR")].message}' 2>/dev/null)
   echo "$(date +%H:%M:%S) Waiting — DeploymentCR: $STATUS"
   sleep 30
@@ -136,22 +220,18 @@ echo "ManageWorkspace is Ready"
 If it stays in a failed state, check the `run-db.sh` output inside the maxinstudb pod:
 
 ```bash
-MAXINST_POD=$(kubectl get pod -n mas-instance1-manage -l mas.ibm.com/appType=maxinstudb \
+MAXINST_POD=$(kubectl get pod -n mas-${MAS_INSTANCE_ID}-manage -l mas.ibm.com/appType=maxinstudb \
   --no-headers -o custom-columns=':metadata.name' | head -1)
-kubectl logs -n mas-instance1-manage "$MAXINST_POD" \
+kubectl logs -n mas-${MAS_INSTANCE_ID}-manage "$MAXINST_POD" \
   | grep -E "status:|Crypto Keys|Query count|BMXAA681[89]|Maximo version"
 ```
 
 And check the operator Ansible playbook for the workspace:
 
 ```bash
-kubectl logs -n mas-instance1-manage \
-  $(kubectl get pod -n mas-instance1-manage -l app.kubernetes.io/name=ibm-mas-manage \
+kubectl logs -n mas-${MAS_INSTANCE_ID}-manage \
+  $(kubectl get pod -n mas-${MAS_INSTANCE_ID}-manage -l app.kubernetes.io/name=ibm-mas-manage \
     --no-headers -o custom-columns=':metadata.name' | head -1) \
   --all-containers --since=10m \
   | grep -E "PLAY RECAP|prepare.db|failed="
 ```
-
-
-
-

@@ -41,7 +41,8 @@ Save the current number of replicas, then scale down all the deployments in the 
 or connected to the database when they are restored:
 
 ```
-oc get deployment -n mas-${MAS_INSTANCE_ID}-manage -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > manage-replicas.txt
+NS=mas-${MAS_INSTANCE_ID}-manage
+[ -f "$NS-replicas.txt" ] || oc get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
 oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
 ```
 
@@ -85,7 +86,7 @@ Scale the deployments back to their original number of replicas:
 ```
 while read name replicas; do
   oc scale --replicas $replicas deployment $name -n mas-${MAS_INSTANCE_ID}-manage
-done < manage-replicas.txt
+done < mas-${MAS_INSTANCE_ID}-manage-replicas.txt
 ```
 
 The operator then reconciles the top objects and recreates all the derived resources. The reconciliation is a long process 

@@ -221,7 +221,7 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
   INSTANCE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
   for NS in mas-$INSTANCE-manage mas-$INSTANCE-core; do
     echo "Saving replicas and scaling down namespace: $NS"
-    kubectl get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
+    [ -f "$NS-replicas.txt" ] || kubectl get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
     kubectl scale deployment --all -n "$NS" --replicas=0
     echo "Waiting up to 300s for all pods in $NS to terminate."
     sleep 5
@@ -232,7 +232,7 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
 done
 ```
 
-Keep the `<namespace>-replicas.txt` files, you need them to scale back up.
+Keep the `<namespace>-replicas.txt` files, you need them to scale back up. An existing file is not overwritten, so that running this again on a namespace already scaled down does not save zeros.
 
 > **If you are doing a cross instance restore**
 > Restore the secret `<workspaceid>-manage-encryptionsecret` in the manage namespaces with Kasten 
