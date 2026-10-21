@@ -342,6 +342,12 @@ done
 | `autoGenerateEncryptionKeys` in ManageWorkspace | `mas-<instance>-manage` | untouched | set to `false` before the scale down |
 | `JdbcCfg` and its credentials secret | `mas-<instance>-core` | untouched | untouched, compare only |
 
+> **The Manage encryption secret is not specific to DB2u.** `<workspaceid>-manage-encryptionsecret` holds the Maximo crypto keys 
+> (`MXE_SECURITY_CRYPTO_KEY`, `MXE_SECURITY_CRYPTOX_KEY`...) that Manage uses to encrypt the columns of type `CRYPTO`/`CRYPTOX` 
+> (stored passwords, endpoint credentials...) before writing them to the database. It must match the restored data whatever the 
+> database is (DB2u, Oracle, SQL Server). With an external database you still restore this secret and set `autoGenerateEncryptionKeys: false`. 
+> It is a different thing from the DB2 native encryption keystore (`keystore.p12`), which only exists with DB2u and encrypts the whole database at rest.
+
 ---
 
 ## Cleanup
