@@ -110,13 +110,18 @@ find the timestamp of the backup
 TIMESTAMP=$(su - db2inst1 -c "ls $BACKUP_DIR/BLUDB.*.001 | sort | tail -1 | xargs basename | cut -d. -f5")
 ```
 
-Now restore 
+Now restore. The backup is an online backup, so the log files embedded in the image (`include logs`)
+must be replayed. `db2 restore` does **not** extract them unless `logtarget` is given; without it the
+rollforward fails with `SQL1273N ... missing log file`.
 ```bash
-su - db2inst1 "db2 force application all"
-su - db2inst1 "db2 terminate"
-su - db2inst1 "db2 deactivate db bludb"
-su - db2inst1 -c "db2 restore db bludb from $BACKUP_DIR taken at $TIMESTAMP replace existing without prompting"
-su - db2inst1 "db2 rollforward db bludb to end of logs and complete"
+LOG_TARGET=/mnt/backup/restore-logs
+su - db2inst1 -c "rm -rf $LOG_TARGET && mkdir -p $LOG_TARGET"
+su - db2inst1 -c "db2 force application all"
+su - db2inst1 -c "db2 terminate"
+su - db2inst1 -c "db2 deactivate db bludb"
+su - db2inst1 -c "db2 restore db bludb from $BACKUP_DIR taken at $TIMESTAMP logtarget $LOG_TARGET replace existing without prompting"
+su - db2inst1 -c "db2 rollforward db bludb to end of backup and complete overflow log path ($LOG_TARGET)"
+su - db2inst1 -c "rm -rf $LOG_TARGET"
 ```
 
 scale up the manage namespaces 

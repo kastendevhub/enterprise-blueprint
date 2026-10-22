@@ -14,11 +14,15 @@ actions:
   #
   # Writes an online, self-contained DB2 backup (INCLUDE LOGS) to the permanent
   # backup PVC at /mnt/backup/backup/.  Only one backup image is kept so the
-  # restorePosthook can always find it deterministically.
+  # manual restore procedure (README.md) can always find it deterministically.
+  #
+  # This blueprint has no restore action: the DB2 restore + rollforward is done
+  # manually following README.md.  Because the backup is online, the restore
+  # must use LOGTARGET to extract the embedded logs before the rollforward.
   #
   # Copies the encryption keystore (keystore.p12 / keystore.sth) alongside the
   # backup image on the same backup PVC.  This pairing ensures that:
-  #   • On same-cluster restore: restorePosthook copies the keystore back to
+  #   • On same-cluster restore: the operator copies the keystore back to
   #     KEYSTORE_LOCATION before running db2 restore, guaranteeing the decryption
   #     key always matches the backup image even if the meta PVC was improperly
   #     restored by Kasten.
@@ -62,9 +66,9 @@ actions:
 
           # Online backup with INCLUDE LOGS.
           # INCLUDE LOGS embeds the archive log files required to bring the database
-          # to a consistent state after restore.  The image is self-contained: the
-          # restorePosthook can perform a full restore + rollforward without needing
-          # the separate archive log directory at /mnt/backup/archivelog.
+          # to a consistent state after restore.  The image is self-contained: a full
+          # restore (with LOGTARGET) + rollforward does not need the separate
+          # archive log directory at /mnt/backup/archivelog.
           echo "Running DB2 online backup (INCLUDE LOGS) ..."
           su - db2inst1 -c "db2 backup db BLUDB online to $BACKUP_DIR compress include logs"
           BACKUP_FILE=$(su - db2inst1 -c "ls $BACKUP_DIR/BLUDB.*.001 | tail -1")

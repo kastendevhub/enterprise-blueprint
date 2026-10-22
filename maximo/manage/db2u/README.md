@@ -297,14 +297,37 @@ find the timestamp of the backup
 TIMESTAMP=$(su - db2inst1 -c "ls $BACKUP_DIR/BLUDB.*.001 | sort | tail -1 | xargs basename | cut -d. -f5")
 ```
 
-Now restore 
+Now restore. The backup is an online backup, so the log files embedded in the image (`include logs`)
+must be replayed to make the database consistent. `db2 restore` does **not** extract those logs unless
+`logtarget` is given. Without it the rollforward fails with `SQL1273N ... missing log file`. We extract
+them into an empty directory and point the rollforward at it with `overflow log path`.
 ```bash
+LOG_TARGET=/mnt/backup/restore-logs
+su - db2inst1 -c "rm -rf $LOG_TARGET && mkdir -p $LOG_TARGET"
 su - db2inst1 -c "db2 force application all"
 su - db2inst1 -c "db2 terminate"
 su - db2inst1 -c "db2 deactivate db bludb"
-su - db2inst1 -c "db2 restore db bludb from $BACKUP_DIR taken at $TIMESTAMP  on /mnt/blumeta0/db2/databases dbpath on /mnt/blumeta0/db2/databases replace existing without prompting"
-su - db2inst1 -c "db2 rollforward db bludb to end of logs and complete"
+su - db2inst1 -c "db2 restore db bludb from $BACKUP_DIR taken at $TIMESTAMP  on /mnt/blumeta0/db2/databases dbpath on /mnt/blumeta0/db2/databases logtarget $LOG_TARGET replace existing without prompting"
+su - db2inst1 -c "db2 rollforward db bludb to end of backup and complete overflow log path ($LOG_TARGET)"
+su - db2inst1 -c "rm -rf $LOG_TARGET"
 ```
+
+> **Already restored without `logtarget`?** If the database is stuck in `ROLL-FORWARD PENDING` with
+> `SQL1273N`, you don't need to restore the data again. Extract only the logs and finish the rollforward:
+> ```bash
+> su - db2inst1 -c "rm -rf $LOG_TARGET && mkdir -p $LOG_TARGET"
+> su - db2inst1 -c "db2 restore db bludb logs from $BACKUP_DIR taken at $TIMESTAMP logtarget $LOG_TARGET"
+> su - db2inst1 -c "db2 rollforward db bludb to end of backup and complete overflow log path ($LOG_TARGET)"
+> ```
+> We use `to end of backup` rather than `to end of logs`: on a destination cluster the active log path
+> can contain logs of the reinstalled database, which belong to another log chain.
+
+In another terminal, redo this command multiple times to follow up the quantity of data restored.
+```bash
+su - db2inst1 -c "db2 list utilities show detail " 
+```
+
+
 
 scale up the core and manage namespaces, core first, to their original number of replicas
 ```bash
