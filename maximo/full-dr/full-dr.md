@@ -69,12 +69,22 @@ This is precisely why the DB2U restore blueprint **does not restore the `bludb_s
 
 ## 2. Prepare the DR cluster
 
-Set the variables used in the rest of this document. They must be the same as on the source cluster:
+Set the variables used in the rest of this document. Read them from the MAS labels on the CRs of the reinstalled DR cluster 
+rather than typing them, this avoids parsing resource names:
 
 ```bash
-MAS_INSTANCE_ID=instance1
-MAS_WORKSPACE_ID=workspace1
+# list all the instances and workspaces
+oc get suite -A -o jsonpath='{range .items[*]}{.metadata.labels.mas\.ibm\.com/instanceId}{"\t"}{.metadata.name}{"\t"}{.metadata.namespace}{"\n"}{end}'
+oc get manageworkspace -A -o jsonpath='{range .items[*]}{.metadata.labels.mas\.ibm\.com/instanceId}{"\t"}{.metadata.labels.mas\.ibm\.com/workspaceId}{"\n"}{end}'
+
+# set the variables (single instance and workspace, otherwise pick yours from the lists above)
+MAS_INSTANCE_ID=$(oc get suite -A -o jsonpath='{.items[0].metadata.labels.mas\.ibm\.com/instanceId}')
+MAS_WORKSPACE_ID=$(oc get workspace -n mas-${MAS_INSTANCE_ID}-core -o jsonpath='{.items[0].metadata.labels.mas\.ibm\.com/workspaceId}')
+echo "$MAS_INSTANCE_ID / $MAS_WORKSPACE_ID"
 ```
+
+They must be the same as on the source cluster: compare them with the names of the Suite and ManageWorkspace (`<instance>-<workspace>`) 
+in the source restore points. A mismatch means the reinstall was not done with the same configuration.
 
 On the DR cluster:
 - Deploy the [MongoCE blueprint](../mongoce/readme.md#install-and-execute-the-blueprint) and the [DB2u blueprint and its binding](../manage/db2u/README.md#deploying-the-blueprint).
