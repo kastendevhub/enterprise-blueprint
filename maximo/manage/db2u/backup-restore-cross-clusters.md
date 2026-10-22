@@ -47,7 +47,7 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
   MANAGE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
   MANAGE_NS=mas-$MANAGE-manage
   echo "Scaling down Maximo namespace: $MANAGE_NS"
-  kubectl scale deployment --all -n "$MANAGE_NS" --replicas=0
+  kubectl scale deployment,statefulset --all -n "$MANAGE_NS" --replicas=0
   echo "Waiting 300s for all pods in $MANAGE_NS to terminate."
   sleep 5
   kubectl delete pod --all -n "$MANAGE_NS"
@@ -130,6 +130,6 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
   MANAGE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
   MANAGE_NS=mas-$MANAGE-manage
   echo "Scaling up Maximo namespace: $MANAGE_NS"
-  kubectl scale deployment --all -n "$MANAGE_NS" --replicas=1  
+  kubectl scale deployment,statefulset --all -n "$MANAGE_NS" --replicas=1
 done
 ```

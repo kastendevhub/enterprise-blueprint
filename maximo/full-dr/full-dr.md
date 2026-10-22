@@ -139,8 +139,8 @@ scaled down does not save zeros:
 
 ```bash
 for NS in mas-${MAS_INSTANCE_ID}-manage mas-${MAS_INSTANCE_ID}-core; do
-  [ -f "$NS-replicas.txt" ] || oc get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
-  oc scale deployment --all -n "$NS" --replicas=0
+  [ -f "$NS-replicas.txt" ] || oc get deployment,statefulset -n "$NS" -o jsonpath='{range .items[*]}{.kind}/{.metadata.name} {.spec.replicas}{"\n"}{end}' > "$NS-replicas.txt"
+  oc scale deployment,statefulset --all -n "$NS" --replicas=0
   oc wait pod --all -n "$NS" --for=delete --timeout=300s 2>/dev/null || true
 done
 ```
@@ -180,11 +180,11 @@ Start from the bottom of the chain: Core first, wait for the Suite to be ready, 
 
 ```bash
 NS=mas-${MAS_INSTANCE_ID}-core
-while read DEPLOY REPLICAS; do oc scale deployment "$DEPLOY" -n "$NS" --replicas="$REPLICAS"; done < "$NS-replicas.txt"
+while read RESOURCE REPLICAS; do oc scale "$RESOURCE" -n "$NS" --replicas="$REPLICAS"; done < "$NS-replicas.txt"
 oc wait suite --all -n "$NS" --for=condition=Ready --timeout=1800s
 
 NS=mas-${MAS_INSTANCE_ID}-manage
-while read DEPLOY REPLICAS; do oc scale deployment "$DEPLOY" -n "$NS" --replicas="$REPLICAS"; done < "$NS-replicas.txt"
+while read RESOURCE REPLICAS; do oc scale "$RESOURCE" -n "$NS" --replicas="$REPLICAS"; done < "$NS-replicas.txt"
 ```
 
 Once Manage is `Ready` (see below), delete the `*-replicas.txt` files, otherwise a future restore would reuse these old counts.

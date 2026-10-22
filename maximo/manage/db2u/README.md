@@ -221,8 +221,8 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
   INSTANCE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
   for NS in mas-$INSTANCE-manage mas-$INSTANCE-core; do
     echo "Saving replicas and scaling down namespace: $NS"
-    [ -f "$NS-replicas.txt" ] || kubectl get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
-    kubectl scale deployment --all -n "$NS" --replicas=0
+    [ -f "$NS-replicas.txt" ] || kubectl get deployment,statefulset -n "$NS" -o jsonpath='{range .items[*]}{.kind}/{.metadata.name} {.spec.replicas}{"\n"}{end}' > "$NS-replicas.txt"
+    kubectl scale deployment,statefulset --all -n "$NS" --replicas=0
     echo "Waiting up to 300s for all pods in $NS to terminate."
     sleep 5
     kubectl delete pod --all -n "$NS"
@@ -232,7 +232,9 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
 done
 ```
 
-Keep the `<namespace>-replicas.txt` files, you need them to scale back up. An existing file is not overwritten, so that running this again on a namespace already scaled down does not save zeros.
+Statefulsets are scaled down too, not only deployments: some pods of these namespaces are owned by statefulsets and would keep running otherwise.
+
+Keep the `<namespace>-replicas.txt` files, you need them to scale back up. Each line is `<Kind>/<name> <replicas>`. An existing file is not overwritten, so that running this again on a namespace already scaled down does not save zeros.
 
 > **If you are doing a cross instance restore**
 > Restore the secret `<workspaceid>-manage-encryptionsecret` in the manage namespaces with Kasten 
@@ -335,8 +337,8 @@ kubectl get db2ucluster -n db2u -o jsonpath='{range .items[*]}{.metadata.name}{"
   INSTANCE=$(echo "$NAME" | sed 's/^mas-\([^-]*\).*/\1/')
   for NS in mas-$INSTANCE-core mas-$INSTANCE-manage; do
     echo "Scaling up namespace: $NS"
-    while read DEPLOY REPLICAS; do
-      kubectl scale deployment "$DEPLOY" -n "$NS" --replicas="$REPLICAS"
+    while read RESOURCE REPLICAS; do
+      kubectl scale "$RESOURCE" -n "$NS" --replicas="$REPLICAS"
     done < "$NS-replicas.txt"
   done
 done

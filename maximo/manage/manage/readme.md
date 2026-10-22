@@ -35,15 +35,15 @@ you know in which VBR backup you need to restore the files. You can easily save 
 Only the top objects (ManageWorkspace, ManageDeployment, ManageBuild) and, if Kasten backs them up, the PVCs need to be restored. 
 All the other resources of the namespace are derived from the top objects and will be recreated by the operator during reconciliation.
 
-## Step 1: scale down all the deployments
+## Step 1: scale down all the deployments and statefulsets
 
-Save the current number of replicas, then scale down all the deployments in the manage namespace, so that no pod is using the PVCs 
-or connected to the database when they are restored:
+Save the current number of replicas, then scale down all the deployments and statefulsets in the manage namespace, so that no pod 
+is using the PVCs or connected to the database when they are restored:
 
 ```
 NS=mas-${MAS_INSTANCE_ID}-manage
-[ -f "$NS-replicas.txt" ] || oc get deployment -n "$NS" -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas --no-headers > "$NS-replicas.txt"
-oc scale --replicas 0 deployment --all -n mas-${MAS_INSTANCE_ID}-manage
+[ -f "$NS-replicas.txt" ] || oc get deployment,statefulset -n "$NS" -o jsonpath='{range .items[*]}{.kind}/{.metadata.name} {.spec.replicas}{"\n"}{end}' > "$NS-replicas.txt"
+oc scale --replicas 0 deployment,statefulset --all -n "$NS"
 ```
 
 ## Step 2 (optional): restore the database
@@ -79,13 +79,13 @@ If the PVCs are backed up by VBR, there are no PVCs in the restore point: see [I
 >
 > If they differ, fix the DR install before you go further. Then, in this step, restore only the PVCs (if Kasten backs them up) and continue with the scale up.
 
-## Step 4: scale up the deployments
+## Step 4: scale up the deployments and statefulsets
 
-Scale the deployments back to their original number of replicas:
+Scale the deployments and statefulsets back to their original number of replicas:
 
 ```
-while read name replicas; do
-  oc scale --replicas $replicas deployment $name -n mas-${MAS_INSTANCE_ID}-manage
+while read resource replicas; do
+  oc scale --replicas $replicas $resource -n mas-${MAS_INSTANCE_ID}-manage
 done < mas-${MAS_INSTANCE_ID}-manage-replicas.txt
 ```
 
