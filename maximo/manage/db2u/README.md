@@ -302,7 +302,7 @@ Now restore
 su - db2inst1 -c "db2 force application all"
 su - db2inst1 -c "db2 terminate"
 su - db2inst1 -c "db2 deactivate db bludb"
-su - db2inst1 -c "db2 restore db bludb from $BACKUP_DIR taken at $TIMESTAMP replace existing without prompting"
+su - db2inst1 -c "db2 restore db bludb from $BACKUP_DIR taken at $TIMESTAMP  on /mnt/blumeta0/db2/databases dbpath on /mnt/blumeta0/db2/databases replace existing without prompting"
 su - db2inst1 -c "db2 rollforward db bludb to end of logs and complete"
 ```
 
