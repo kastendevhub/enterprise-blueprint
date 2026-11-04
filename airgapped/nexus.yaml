@@ -1,0 +1,140 @@
+# Test Nexus Repository (OSS) on OpenShift, used as the private registry
+# target for `k10tools image copy`.
+#   - port 8081: Nexus UI / REST API      -> route "nexus"
+#   - port 8082: docker hosted repo "k10" -> route "nexus-docker"
+#   - port 8083: docker group repo "k10-group" -> route "nexus-docker-group" (optional, negative test)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nexus-data
+  namespace: nexus
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus
+  namespace: nexus
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nexus
+  template:
+    metadata:
+      labels:
+        app: nexus
+    spec:
+      containers:
+        - name: nexus
+          image: docker.io/sonatype/nexus3:3.98.0
+          env:
+            - name: INSTALL4J_ADD_VM_PARAMS
+              value: "-Xms1g -Xmx2g -XX:MaxDirectMemorySize=2g -Djava.util.prefs.userRoot=/nexus-data/javaprefs"
+          ports:
+            - name: ui
+              containerPort: 8081
+            - name: docker
+              containerPort: 8082
+            - name: docker-group
+              containerPort: 8083
+          readinessProbe:
+            httpGet:
+              path: /service/rest/v1/status
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "1"
+              memory: 3Gi
+            limits:
+              memory: 4Gi
+          volumeMounts:
+            - name: data
+              mountPath: /nexus-data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nexus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus
+  namespace: nexus
+spec:
+  selector:
+    app: nexus
+  ports:
+    - name: ui
+      port: 8081
+      targetPort: 8081
+    - name: docker
+      port: 8082
+      targetPort: 8082
+    - name: docker-group
+      port: 8083
+      targetPort: 8083
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: nexus
+  namespace: nexus
+spec:
+  to:
+    kind: Service
+    name: nexus
+  port:
+    targetPort: ui
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: nexus-docker
+  namespace: nexus
+  annotations:
+    # image layers can be large, give the router time
+    haproxy.router.openshift.io/timeout: 10m
+spec:
+  to:
+    kind: Service
+    name: nexus
+  port:
+    targetPort: docker
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+# Optional: only used to show that pushing through a docker *group* repo fails
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: nexus-docker-group
+  namespace: nexus
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
+spec:
+  to:
+    kind: Service
+    name: nexus
+  port:
+    targetPort: docker-group
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
