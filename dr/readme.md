@@ -50,6 +50,7 @@ What a KDR restore can bring back:
 
 Notes:
 
+- "Exported restore points only": `k10backup.json` does not list them. Kasten imports them again from the export repositories, using the migration tokens of the export policies saved in the KDR restore point (see [Migration tokens](#migration-tokens-how-exported-restore-points-come-back)).
 - "Everything, from **B**" needs `validSnapshotAvailable: true` on the chosen entry. If the local snapshot is gone, you only get Kasten resources and exported restore points.
 - Local restore points restored on another cluster are listed in the catalog, but usually cannot be restored there: the snapshots they point to do not exist on that cluster.
 - **Only the Exported Catalog Snapshot mode lets you keep the action history and local restore points on another cluster**, and only with the `v3.2_data` id.
@@ -122,6 +123,46 @@ Exported Catalog Snapshot: one pair per run. **C** is written first and **A** a 
   validSnapshotAvailable: false
   exportedCatalogAvailable: true
 ```
+
+### Migration tokens: how exported restore points come back
+
+**Every KDR restore point (`v3`, `v3.2_metadata`) saves the migration token of each policy that exports.** This is what brings back the exported restore points when the catalog cannot be restored.
+
+When a policy has an export action, Kasten creates a migration-token secret for it, owned by the policy (`<policy name>-<hash>-migration-token`). This token opens the exported data of that policy, the same token you would give an import policy on another cluster. Each KDR run writes into `k10backup.json` (**A**):
+
+- the **policy**, with its export profile and the name of its migration-token secret;
+- the **migration-token secret** itself;
+- the **repository** that holds the exported restore points of the policy: `<profile path>/k10/<clusterID>/migration/<policy name>/kopia`.
+
+`k10backup.json` has **no list of restore points**. Restore points live in the catalog, so a KDR restore gets them back in one of two ways:
+
+- **The catalog is restored** from **B** or **C**: all restore points come back with it, local and exported, with the action history.
+- **The catalog is not restored** (No Catalog Snapshot mode, local snapshot gone, or another cluster without **C**): for each export policy, Kasten takes its migration token and export profile from `k10backup.json` and **imports the exported restore points again**, as an import policy would. Local restore points and action history are lost.
+
+Example: namespace `dummy-rp` backed up and exported twice by policy `dummy-rp-backup` to profile `rustfs-apps`, then a No Catalog Snapshot KDR run (`v3`, `localSnapshotTaken: false`). No restore point name appears in `k10backup.json`; these entries do:
+
+```
+Policies:            dummy-rp-backup   export -> profile rustfs-apps, migrationToken dummy-rp-backup-0acbf51672d25d64-migration-token
+Secrets:             dummy-rp-backup-0acbf51672d25d64-migration-token   (key: migrationToken, owner: Policy/dummy-rp-backup)
+RepositoryArtifacts: type Collection, repoPath dummy-rp-backup/kopia, bucket app-exports
+```
+
+Consequences:
+
+- **Delete an export policy and you lose its migration token** (the secret is owned by the policy). The next KDR runs no longer contain it, and its exported restore points are not imported back. To keep them recoverable, save the migration token before deleting the policy, and use it later in an import policy.
+- If the import fails for one policy, the restore continues with the others and reports the error.
+- Protect the KDR repository as much as the export repositories: the migration tokens in `k10backup.json` open all your exported data (see [Protect the DR passphrase](#protect-the-dr-passphrase)).
+
+For reference, the top-level sections of `k10backup.json`:
+
+| Section | Content |
+|---|---|
+| `Policies`, `Profiles`, `CustomResources`, `ConfigMaps`, `RoleBindings` | Kasten resources |
+| `Secrets` | Kasten secrets, including the migration tokens |
+| `K10MasterKeyArtifact(List)` | the master keys |
+| `RepositoryArtifacts` | the repositories Kasten exported to |
+| `LocalSnapshotArtifacts` | the local catalog snapshot (**B**), or `null` |
+| `ExportSnapshotArtifacts` | the exported catalog snapshot (**C**), or `null` |
 
 ### Why a v3.2_data id needs its v3.2_metadata
 
