@@ -4,10 +4,15 @@ You can apply the [alerting rules](./kasten-rules.yaml) directly in OpenShift
 if user workload monitoring is activated. Both the Prometheus stack and the
 OpenShift monitoring stack use the `prometheusrules.monitoring.coreos.com` CRD.
 
+> Tested end to end with Kasten 9.0.11 on OpenShift 4.21 (19 Nov 2026): metrics
+> scraped, rules evaluated by Thanos Ruler, alerts delivered by the user workload
+> Alertmanager.
+
 ## Configure OpenShift User Workload Monitoring
 
 1. Make sure the ConfigMap `cluster-monitoring-config` in the `openshift-monitoring` namespace has
-`enableUserWorkload: true`
+`enableUserWorkload: true`. On a new cluster this ConfigMap does not exist: create it. If it
+already exists, add the key with `oc edit` instead of replacing it, so you keep the other settings.
 
 For instance, this is the ConfigMap in my OpenShift cluster:
 ```
@@ -37,108 +42,64 @@ data:
       enableAlertmanagerConfig: true
 ```
 
-You should then see the pods `alertmanager-user-workload-0` and `alertmanager-user-workload-1` in the `openshift-user-workload-monitoring` namespace restarting.
+OpenShift creates this ConfigMap empty when user workload monitoring is enabled.
+Use `oc edit` (or `oc apply`) to set the content.
 
-## Apply the Alerting Rule
+You should then see the pods `alertmanager-user-workload-0` and `alertmanager-user-workload-1` in the `openshift-user-workload-monitoring` namespace starting.
+
+## Apply the Alerting Rules
 
 ```
 oc apply -f kasten-rules.yaml
+oc apply -f kasten-ocp-rules.yaml
 ```
 
-## Openshift monitoring use service monitor not scrape config 
+[kasten-ocp-rules.yaml](./kasten-ocp-rules.yaml) adds `kasten-deployment-down`,
+based on kube-state-metrics (see [Limitations](#limitations-on-openshift)).
 
-Openshift monitoring is not using scrape config it uses service monitor instead. You have to create them:
+## OpenShift monitoring uses a ServiceMonitor, not a scrape config
+
+OpenShift monitoring does not use the [scrape config](./kasten-scrape-config.yaml). It discovers
+targets through ServiceMonitors.
+
+The Prometheus embedded in Kasten scrapes 16 endpoints on 13 services plus the executor pods.
+The metrics used by the rules are spread over several of them, and not always on port 8000:
+
+| Metric | Service, port |
+|---|---|
+| `catalog_actions_count`, `catalog_persistent_volume_free_space_percent` | catalog-svc, `http` (8000) |
+| `policies_count` | controllermanager-svc, `http` (8000) |
+| `compliance_count` | dashboardbff-svc, `http` (8000) |
+| `metering_license_compliance_status` | metering-svc, `http` (8000) |
+| `events_service_event_groups` | state-svc, `events` (8001) |
+| `repository_data_procedure_total` | crypto-svc, `repositories` (8003) |
+
+Apply [kasten-ocp-servicemonitor.yaml](./kasten-ocp-servicemonitor.yaml). It is a single
+ServiceMonitor that scrapes the same endpoints as the embedded Prometheus:
 
 ```
-cat <<EOF | oc create -f - 
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  labels:
-    k8s-app: kasten-io
-  name: catalog-metrics
-  namespace: kasten-io
-spec:
-  endpoints:
-  - interval: 30s
-    port: http
-    scheme: http
-  selector:
-    matchLabels:
-      component: catalog
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  labels:
-    k8s-app: kasten-io
-  name: controllermanager-metrics
-  namespace: kasten-io
-spec:
-  endpoints:
-  - interval: 30s
-    port: http
-    scheme: http
-  selector:
-    matchLabels:
-      component: controllermanager
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  labels:
-    k8s-app: kasten-io
-  name: metering-metrics
-  namespace: kasten-io
-spec:
-  endpoints:
-  - interval: 30s
-    port: http
-    scheme: http
-  selector:
-    matchLabels:
-      component: metering
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  labels:
-    k8s-app: kasten-io
-  name: dashboardbff-metrics
-  namespace: kasten-io
-spec:
-  endpoints:
-  - interval: 30s
-    port: http
-    scheme: http
-  selector:
-    matchLabels:
-      component: dashboardbff
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  labels:
-    k8s-app: kasten-io
-  name: crypto-metrics
-  namespace: kasten-io
-spec:
-  endpoints:
-  - interval: 30s
-    port: http
-    scheme: http
-  selector:
-    matchLabels:
-      component: crypto
-EOF
+oc apply -f kasten-ocp-servicemonitor.yaml
 ```
 
+It selects all the Kasten services except those without metrics, and declares one endpoint per
+metrics port name. A service that does not have a given port is ignored for that endpoint. It also
+adds the labels `application="k10"` and `app="k10"`, which `kasten-service-down` and
+`kasten-executor-down` filter on.
+
+After a minute you should have 19 targets `up` in `kasten-io` (Observe > Targets in the console).
+
+> Older versions of this page created 5 ServiceMonitors (catalog, controllermanager, metering,
+> dashboardbff, crypto, port `http` only). With those, `kasten-event-group`,
+> `kasten-full-maintenance-failed`, `kasten-service-down` and `kasten-executor-down` never fire.
+> Delete them before applying the new one:
+> `oc delete servicemonitor -n kasten-io catalog-metrics controllermanager-metrics metering-metrics dashboardbff-metrics crypto-metrics`
 
 ## Allow the Monitoring Namespace to Scrape kasten-io Pods
 
-If your cluster enforces NetworkPolicies, the Prometheus pods running in
-`openshift-user-workload-monitoring` cannot reach the scrape targets in
-`kasten-io` without an explicit ingress rule.
+Kasten installs a `default-deny` NetworkPolicy in `kasten-io`, so the Prometheus pods
+running in `openshift-user-workload-monitoring` cannot reach the scrape targets
+without an explicit ingress rule. Without it, all the targets except the gateway
+are `down` with `context deadline exceeded`.
 
 Apply the following NetworkPolicy once in the `kasten-io` namespace:
 
@@ -179,74 +140,33 @@ Now check that the new configuration has been injected in Thanos:
 oc get cm -n openshift-user-workload-monitoring thanos-ruler-user-workload-rulefiles-0 -o yaml
 ```
 
-You should see something like this:
+You should see one entry per PrometheusRule. OpenShift adds `namespace="kasten-io"` to every
+expression, so a rule only sees the metrics of its own namespace:
 
 ```
 apiVersion: v1
 data:
-  kasten-io-kasten-rules-8e3029a6-e1f5-4c2f-9905-bbd1a421d90c.yaml: |
+  kasten-io-kasten-ocp-rules-<uid>.yaml: |
+    ...
+  kasten-io-kasten-rules-<uid>.yaml: |
     groups:
     - name: ./kasten.rules
       rules:
-      - alert: catalog-over-50-percent
-        annotations:
-          description: 'The size of the catalog is over 50 % : {{ $value }} %.'
-          runbook_url: https://docs.kasten.io/latest/references/best-practices.html#monitoring-and-alerting
-          summary: The size of the catalog is over 50 %.
+      - alert: kasten-catalog-over-50-percent
+        ...
         expr: 100 - catalog_persistent_volume_free_space_percent{namespace="kasten-io"}
           > 50
-        labels:
-          namespace: kasten-io
-          severity: warning
-      - alert: action-on-error
-        annotations:
-          description: The action of type {{ $labels.type}} executed on policy {{ $labels.policy}}
-            for the namespace {{ $labels.namespace}} is on error.
-          runbook_url: https://docs.kasten.io/latest/operating/support.html
-          summary: Action on error
+      - alert: kasten-failed-action
+        ...
         expr: increase(catalog_actions_count{namespace="kasten-io",status="failed"}[1h])
           > 0
-        labels:
-          namespace: kasten-io
-          severity: critical
-      - alert: license-non-compliant
-        annotations:
-          description: Your license is non compliant, please check on the dashboard Settings
-            > Licensing.
-          runbook_url: https://docs.kasten.io/latest/multicluster/concepts/license.html
-          summary: License non compliant
-        expr: metering_license_compliance_status{namespace="kasten-io"} == 0
-        labels:
-          namespace: kasten-io
-          severity: warning
-      - alert: kasten-service-down
-        annotations:
-          description: The kasten service {{ $labels.service }} is down.
-          runbook_url: https://docs.kasten.io/latest/operating/support.html
-          summary: A kasten service is down
-        expr: up{application="k10",namespace="kasten-io"} == 0
-        labels:
-          namespace: kasten-io
-          severity: critical
-      - alert: kasten-executor-down
-        annotations:
-          description: The kasten service {{ $labels.service }} is down.
-          runbook_url: https://docs.kasten.io/latest/operating/support.html
-          summary: A kasten service is down
-        expr: up{app="k10",namespace="kasten-io"} == 0
-        labels:
-          namespace: kasten-io
-          severity: critical
-      - alert: kasten-event-group
-        annotations:
-          description: The kasten event {{ $labels.action }} has been emitted.
-          runbook_url: https://docs.kasten.io/latest/operating/support.html
-          summary: A kasten critical event is detected
-        expr: events_service_event_groups{namespace="kasten-io"} > 0
-        labels:
-          namespace: kasten-io
-          severity: critical
+      ...
 ```
+
+Because the `namespace` label is forced to `kasten-io`, the application namespace that Kasten
+puts in `namespace` is renamed `exported_namespace`. The descriptions in
+[kasten-rules.yaml](./kasten-rules.yaml) use `{{ or $labels.exported_namespace $labels.namespace }}`,
+so they show the right namespace on OpenShift and on a plain Prometheus stack.
 
 You can also find them in the UI:
 
@@ -254,8 +174,11 @@ You can also find them in the UI:
 
 ## Configure a receiver to send the alert somewhere
 
+OpenShift already creates the secret `alertmanager-user-workload` with a default
+configuration, so use `oc apply` (an `oc create` fails with `AlreadyExists`):
+
 ```
-cat <<EOF | oc create -f -
+cat <<EOF | oc apply -f -
 kind: Secret
 apiVersion: v1
 metadata:
@@ -337,6 +260,32 @@ The main template variables available in both `html` and `text` are:
 Each alert inside `range .Alerts` exposes `.Labels.<name>`,
 `.Annotations.<name>`, `.StartsAt`, `.EndsAt`, and `.GeneratorURL` (a link back
 to the Prometheus expression that triggered the alert).
+
+## Limitations on OpenShift
+
+### A Kasten service with no ready pod does not trigger `kasten-service-down`
+
+The embedded Prometheus scrapes each service by its DNS name, so a service with no
+ready pod gives `up == 0`. A ServiceMonitor only scrapes the ready pods behind the
+service: when a deployment is scaled to 0 or all its pods are crashing, the target
+disappears and `kasten-service-down` does not fire. `kasten-deployment-down` in
+[kasten-ocp-rules.yaml](./kasten-ocp-rules.yaml) covers that case (tested by scaling
+`jobs-svc` to 0).
+
+### `kasten-dr-policy-not-in-place` fires with the Exported Catalog Snapshot mode
+
+Kasten counts the DR policy as `policies_count{action="k10dr"}` only when it has a
+single action. In the [Exported Catalog Snapshot](../dr/readme.md) mode, the DR policy
+has a backup and an export action, so it is counted as `action="backup",chained="export"`
+and `kasten-dr-policy-not-in-place` fires although the DR policy is valid. In that mode,
+replace the expression of this rule with:
+
+```
+absent(catalog_actions_count{policy="k10-disaster-recovery-policy",type="backup",status="complete"})
+```
+
+It fires when the catalog has no completed DR backup. It does not detect a DR policy
+that stopped running after it once succeeded.
 
 ## Troubleshoot Alertmanager when emails are not received
 

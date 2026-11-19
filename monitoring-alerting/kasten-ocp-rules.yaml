@@ -1,0 +1,26 @@
+###############################################################
+# Extra Kasten rules for OpenShift user workload monitoring.
+# Apply together with kasten-rules.yaml. Uses kube-state-metrics,
+# which OpenShift provides out of the box.
+###############################################################
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kasten-ocp-rules
+  namespace: kasten-io
+spec:
+  groups:
+    - name: ./kasten-ocp.rules
+      rules:
+        # With ServiceMonitors, a Kasten service with no ready pod has no
+        # scrape target at all, so kasten-service-down (up == 0) never fires.
+        # This rule catches a deployment that has no available replica.
+        - alert: kasten-deployment-down
+          expr: kube_deployment_status_replicas_available{deployment=~".*-svc|gateway|prometheus-server"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: A Kasten deployment has no available replica
+            description: 'The Kasten deployment {{ $labels.deployment }} has had no available replica for 5 minutes.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'

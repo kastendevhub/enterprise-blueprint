@@ -23,7 +23,7 @@ spec:
             severity: warning
         - alert: kasten-failed-action
           annotations:
-            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ $labels.namespace}} is failing.'
+            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ or $labels.exported_namespace $labels.namespace }} is failing.'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
             summary: Action on error
           expr: 'increase(catalog_actions_count{status="failed"}[1h])>0'
@@ -31,7 +31,7 @@ spec:
             severity: critical
         - alert: kasten-skipped-action
           annotations:
-            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ $labels.namespace}} is being skipped.'
+            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ or $labels.exported_namespace $labels.namespace }} is being skipped.'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
             summary: Action skipped
           expr: 'increase(catalog_actions_count{status="skipped"}[1h])>0'

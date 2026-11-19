@@ -1,0 +1,44 @@
+# ServiceMonitor for OpenShift user workload monitoring.
+# Scrapes the same endpoints as the Prometheus embedded in Kasten
+# (metering-svc /v0/listScrapeTargets + executor pods), tested with Kasten 9.0.11 on OCP 4.21.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kasten-io
+  namespace: kasten-io
+  labels:
+    k8s-app: kasten-io
+spec:
+  selector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values: [k10]
+    # services that do not expose Prometheus metrics
+    - key: component
+      operator: NotIn
+      values: [aggregatedapis, frontend, console-plugin, console-plugin-proxy, prometheus-server]
+  # copy the service label app=k10 on every series (used by kasten-executor-down)
+  targetLabels: [app]
+  endpoints:
+  # one entry per metrics port name; a service without this port is simply ignored
+  - port: http                  # most services, port 8000 (gateway: 80)
+    interval: 30s
+    relabelings: &k10
+    - targetLabel: application  # used by kasten-service-down, as in the embedded Prometheus
+      replacement: k10
+  - port: events                # state-svc 8001: events_service_event_groups
+    interval: 30s
+    relabelings: *k10
+  - port: repositories          # crypto-svc 8003: repository_data_procedure_total
+    interval: 30s
+    relabelings: *k10
+  - port: bloblifecyclemanager  # crypto-svc 8001
+    interval: 30s
+    relabelings: *k10
+  - port: garbagecollector      # crypto-svc 8002
+    interval: 30s
+    relabelings: *k10
+  - port: vbrintegrationapi     # dashboardbff-svc 8001
+    interval: 30s
+    relabelings: *k10
