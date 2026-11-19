@@ -272,20 +272,19 @@ disappears and `kasten-service-down` does not fire. `kasten-deployment-down` in
 [kasten-ocp-rules.yaml](./kasten-ocp-rules.yaml) covers that case (tested by scaling
 `jobs-svc` to 0).
 
-### `kasten-dr-policy-not-in-place` fires with the Exported Catalog Snapshot mode
+### `kasten-dr-policy-not-in-place` checks DR backups, not the policy count
 
-Kasten counts the DR policy as `policies_count{action="k10dr"}` only when it has a
-single action. In the [Exported Catalog Snapshot](../dr/readme.md) mode, the DR policy
-has a backup and an export action, so it is counted as `action="backup",chained="export"`
-and `kasten-dr-policy-not-in-place` fires although the DR policy is valid. In that mode,
-replace the expression of this rule with:
+This is not specific to OpenShift. Kasten counts the DR policy as
+`policies_count{action="k10dr"}` only when it has a single action. In the
+[Exported Catalog Snapshot](../dr/readme.md) mode the DR policy has a backup and an
+export action, so it is counted as `action="backup",chained="export"` and a rule on
+`action="k10dr"` fires although DR is healthy.
 
-```
-absent(catalog_actions_count{policy="k10-disaster-recovery-policy",type="backup",status="complete"})
-```
-
-It fires when the catalog has no completed DR backup. It does not detect a DR policy
-that stopped running after it once succeeded.
+The rule in [kasten-rules.yaml](./kasten-rules.yaml) therefore fires when no DR backup
+succeeded in the last 25 hours. It works with every KDR mode and also catches a DR policy
+that was deleted, disabled or keeps failing. On a fresh install, it clears only after the
+second successful DR run (Prometheus' `increase()` ignores the first sample of a new series).
+Adapt `25h` if your DR policy runs less often than daily.
 
 ## Troubleshoot Alertmanager when emails are not received
 

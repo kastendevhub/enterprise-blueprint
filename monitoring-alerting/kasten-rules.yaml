@@ -48,10 +48,13 @@ spec:
             severity: warning
         - alert: kasten-dr-policy-not-in-place
           annotations:
-            description: 'The DR policy is not in place or is not valid.'
+            description: 'No successful Kasten DR backup in the last 25 hours: the DR policy is missing, deleted, invalid or failing.'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
-            summary: DR policy not in place or is not valid
-          expr: 'policies_count{action="k10dr",status="Success"} != 1'
+            summary: No successful Kasten DR backup in the last 25 hours
+          # Works with every KDR mode. policies_count{action="k10dr"} only counts a DR policy
+          # with a single action, so it stays at 0 in the Exported Catalog Snapshot mode
+          # (backup + export). Adapt 25h if your DR policy runs less often than daily.
+          expr: '(sum(increase(action_backup_ended_count{policy="k10-disaster-recovery-policy",state="succeeded"}[25h])) or vector(0)) < 1'
           labels:
             severity: critical
         - alert: kasten-policies-without-export-location
