@@ -17,7 +17,7 @@ spec:
     # services that do not expose Prometheus metrics
     - key: component
       operator: NotIn
-      values: [aggregatedapis, frontend, console-plugin, console-plugin-proxy, prometheus-server]
+      values: [aggregatedapis, frontend, console-plugin, console-plugin-proxy, prometheus-server, dex]
   # copy the service label app=k10 on every series (used by kasten-executor-down)
   targetLabels: [app]
   endpoints:
