@@ -14,98 +14,99 @@ spec:
       rules:
         - alert: kasten-catalog-over-50-percent
           annotations:
-            description: 'The size of the catalog is over 50 % : {{ $value }} %.'
+            description: 'The size of the catalog is over 50 %: {{ printf "%.1f" $value }} %{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
             runbook_url: 'https://docs.kasten.io/latest/references/best-practices.html#monitoring-and-alerting'
-            summary: The size of the catalog is over 50 %.
-          expr: 100-catalog_persistent_volume_free_space_percent > 50
+            summary: 'The size of the catalog is over 50 %{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
+          expr: 100 - catalog_persistent_volume_free_space_percent > 50
           labels:
             namespace: kasten-io
             severity: warning
         - alert: kasten-failed-action
           annotations:
-            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ or $labels.exported_namespace $labels.namespace }} is failing.'
+            description: 'The action of type {{ $labels.action }}{{ with $labels.subtype }} and subtype {{ . }}{{ end }} executed on policy {{ $labels.policy }} for the namespace {{ $labels.app_namespace }}{{ with $labels.cluster }} on cluster {{ . }}{{ end }} is failing.'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
-            summary: Action on error
-          expr: 'increase(catalog_actions_count{status="failed"}[1h])>0'
+            summary: 'Action on error{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
+          expr: increase(action_ended_total{state="failed"}[1h]) > 0
           labels:
             severity: critical
         - alert: kasten-skipped-action
           annotations:
-            description: 'The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ or $labels.exported_namespace $labels.namespace }} is being skipped.'
+            description: 'The action of type {{ $labels.action }}{{ with $labels.subtype }} and subtype {{ . }}{{ end }} executed on policy {{ $labels.policy }} for the namespace {{ $labels.app_namespace }}{{ with $labels.cluster }} on cluster {{ . }}{{ end }} is skipped.'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
-            summary: Action skipped
-          expr: 'increase(catalog_actions_count{status="skipped"}[1h])>0'
+            summary: 'Action skipped{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
+          # action_skipped_total has no state label.
+          expr: increase(action_skipped_total[1h]) > 0
           labels:
             severity: warning
         - alert: kasten-license-non-compliant
           annotations:
-            description: 'Your license is non compliant, please check on the dashboard Settings > Licensing.'
+            description: 'Your license is non compliant{{ with $labels.cluster }} on cluster {{ . }}{{ end }}, please check on the dashboard Settings > Licensing.'
             runbook_url: 'https://docs.kasten.io/latest/multicluster/concepts/license.html'
-            summary: License non compliant
+            summary: 'License non compliant{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
           expr: metering_license_compliance_status == 0
           labels:
             namespace: kasten-io
             severity: warning
         - alert: kasten-dr-policy-not-in-place
           annotations:
-            description: 'No successful Kasten DR backup in the last 25 hours: the DR policy is missing, deleted, invalid or failing.'
+            description: 'No successful Kasten DR backup{{ with $labels.cluster }} on cluster {{ . }}{{ end }} in the last 25 hours: the DR policy is missing, deleted, invalid or failing.'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
-            summary: No successful Kasten DR backup in the last 25 hours
+            summary: 'No successful Kasten DR backup in the last 25 hours{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
           # Works with every KDR mode. policies_count{action="k10dr"} only counts a DR policy
           # with a single action, so it stays at 0 in the Exported Catalog Snapshot mode
           # (backup + export). Adapt 25h if your DR policy runs less often than daily.
-          expr: '(sum(increase(action_backup_ended_count{policy="k10-disaster-recovery-policy",state="succeeded"}[25h])) or vector(0)) < 1'
+          expr: |
+            sum by (policy, cluster) (
+              increase(action_ended_total{policy="k10-disaster-recovery-policy",state="succeeded"}[25h])
+            ) < 1
+            or
+            absent_over_time(action_ended_total{policy="k10-disaster-recovery-policy",state="succeeded"}[25h])
           labels:
             severity: critical
         - alert: kasten-policies-without-export-location
           annotations:
-            description: 'One of the policies do not have export enabled.'
+            description: 'One of the policies does not have export enabled{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
-            summary: Policies without export location
-          expr: 'policies_count{action="backup",chained!="export",status="Success"} > 0'
+            summary: 'Policies without export location{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
+          # chained is empty for a backup-only policy, and "multi" for 3 or more actions.
+          expr: policies_count{action="backup",chained="",status="Success"} > 0
           labels:
             severity: critical
-        - alert: kasten-compliance-unmanaged-namespaces
-          annotations:
-            description: 'Certain namespaces are not part of an active backup policy.'
-            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
-            summary: Unmanaged namespaces
-          expr: 'compliance_count{state="Unmanaged"} > 0'
-          labels:
-            severity: critical
-        - alert: kasten-event-group 
+        - alert: kasten-event-group
           expr: events_service_event_groups > 0
           labels:
-            severity: critical 
-            namespace: kasten-io     
+            severity: critical
+            namespace: kasten-io
           annotations:
-            summary: "A kasten critical event is detected"
-            description: "The kasten event {{ $labels.action }} has been emmited."
-            runbook_url: "https://docs.kasten.io/latest/operating/support.html"
-        - alert: kasten-service-down 
+            summary: 'A kasten critical event is detected{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
+            description: 'The kasten event {{ $labels.action }} has been emitted{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
+        # With the ServiceMonitor, every target has both application="k10" and app="k10",
+        # executors included. One rule covers all services.
+        - alert: kasten-service-down
           expr: up{application="k10"} == 0
           labels:
-            severity: critical 
-            namespace: kasten-io  
+            severity: critical
+            namespace: kasten-io
           annotations:
-            summary: "A kasten service is down"
-            description: "The kasten service {{ $labels.service }} is down."
-            runbook_url: "https://docs.kasten.io/latest/operating/support.html"
-        - alert: kasten-executor-down 
-          expr: up{app="k10"} == 0
-          labels:
-            severity: critical 
-            namespace: kasten-io     
-          annotations:
-            summary: "A kasten service is down"
-            description: "The kasten service {{ $labels.service }} is down."
-            runbook_url: "https://docs.kasten.io/latest/operating/support.html"
+            summary: 'Kasten service {{ $labels.service }} is down{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
+            description: 'The kasten service {{ $labels.service }} (pod {{ $labels.pod }}) is down{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
+            runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
         - alert: kasten-full-maintenance-failed
           annotations:
-            description: 'Full repository maintenance failed for repository {{ $labels.repo_name }}. Check details with: kubectl get --raw /apis/repositories.kio.kasten.io/v1alpha1/namespaces/kasten-io/storagerepositories/{{ $labels.repo_name }}/details'
+            description: 'Full repository maintenance failed for repository {{ $labels.repo_name }}{{ with $labels.cluster }} on cluster {{ . }}{{ end }}. Check details with: kubectl get --raw /apis/repositories.kio.kasten.io/v1alpha1/namespaces/kasten-io/storagerepositories/{{ $labels.repo_name }}/details'
             runbook_url: 'https://docs.kasten.io/latest/operating/support.html'
-            summary: Full repository maintenance failed
-          expr: 'increase(repository_data_procedure_total{status!="success",operation="maintenance_full"}[1h]) > 0'
+            summary: 'Full repository maintenance failed{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
+          # Kasten creates a failure series only when the first failure happens, so the series
+          # starts at 1 and increase() returns 0. The second part catches series that are new
+          # in the last hour.
+          expr: |
+            increase(repository_data_procedure_total{status!="success",operation="maintenance_full"}[1h]) > 0
+            or
+            (
+              repository_data_procedure_total{status!="success",operation="maintenance_full"}
+              unless
+              repository_data_procedure_total{status!="success",operation="maintenance_full"} offset 1h
+            )
           labels:
             severity: critical
- 

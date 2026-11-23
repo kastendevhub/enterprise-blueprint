@@ -27,6 +27,8 @@ spec:
     relabelings: &k10
     - targetLabel: application  # used by kasten-service-down, as in the embedded Prometheus
       replacement: k10
+    - targetLabel: cluster        # your new label
+      replacement: <cluster_name>
   - port: events                # state-svc 8001: events_service_event_groups
     interval: 30s
     relabelings: *k10
