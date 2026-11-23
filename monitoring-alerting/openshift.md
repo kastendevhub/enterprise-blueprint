@@ -51,11 +51,14 @@ You should then see the pods `alertmanager-user-workload-0` and `alertmanager-us
 
 ```
 oc apply -f kasten-rules.yaml
-oc apply -f kasten-ocp-rules.yaml
+oc apply -f kasten-kube-state-rules.yaml
 ```
 
-[kasten-ocp-rules.yaml](./kasten-ocp-rules.yaml) adds `kasten-deployment-down`,
+[kasten-kube-state-rules.yaml](./kasten-kube-state-rules.yaml) adds `kasten-deployment-down`,
 based on kube-state-metrics (see [Limitations](#limitations-on-openshift)).
+
+> This file was called `kasten-ocp-rules.yaml` before. If you applied it, delete the old rule
+> to avoid duplicate alerts: `oc delete prometheusrule -n kasten-io kasten-ocp-rules`
 
 ## OpenShift monitoring uses a ServiceMonitor, not a scrape config
 
@@ -149,7 +152,7 @@ expression, so a rule only sees the metrics of its own namespace:
 ```
 apiVersion: v1
 data:
-  kasten-io-kasten-ocp-rules-<uid>.yaml: |
+  kasten-io-kasten-kube-state-rules-<uid>.yaml: |
     ...
   kasten-io-kasten-rules-<uid>.yaml: |
     groups:
@@ -333,7 +336,7 @@ The embedded Prometheus scrapes each service by its DNS name, so a service with 
 ready pod gives `up == 0`. A ServiceMonitor only scrapes the ready pods behind the
 service: when a deployment is scaled to 0 or all its pods are crashing, the target
 disappears and `kasten-service-down` does not fire. `kasten-deployment-down` in
-[kasten-ocp-rules.yaml](./kasten-ocp-rules.yaml) covers that case (tested by scaling
+[kasten-kube-state-rules.yaml](./kasten-kube-state-rules.yaml) covers that case (tested by scaling
 `jobs-svc` to 0).
 
 ### `kasten-dr-policy-not-in-place` checks DR backups, not the policy count

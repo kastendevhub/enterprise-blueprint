@@ -1,24 +1,32 @@
 ###############################################################
-# Extra Kasten rules for OpenShift user workload monitoring.
-# Apply together with kasten-rules.yaml. Uses kube-state-metrics,
-# which OpenShift provides out of the box.
+# Extra Kasten rules based on kube-state-metrics.
+# Apply together with kasten-rules.yaml when Kasten is scraped with a
+# ServiceMonitor (OpenShift user workload monitoring): a ServiceMonitor
+# only scrapes ready pods, so kasten-service-down misses a service
+# with no ready pod. OpenShift and kube-prometheus-stack both ship
+# kube-state-metrics.
 ###############################################################
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: kasten-ocp-rules
+  labels:
+    release: prom   # picked up by kube-prometheus-stack, ignored by OpenShift
+  name: kasten-kube-state-rules
   namespace: kasten-io
 spec:
   groups:
-    - name: ./kasten-ocp.rules
+    - name: ./kasten-kube-state.rules
       rules:
         # With ServiceMonitors, a Kasten service with no ready pod has no
         # scrape target at all, so kasten-service-down (up == 0) never fires.
         # This rule catches a deployment that has no available replica.
+        # The explicit namespace filter and label are redundant on OpenShift, which
+        # scopes the rule to kasten-io, but keep it correct on any Prometheus.
         - alert: kasten-deployment-down
-          expr: kube_deployment_status_replicas_available{deployment=~".*-svc|gateway|prometheus-server"} == 0
+          expr: kube_deployment_status_replicas_available{namespace="kasten-io",deployment=~".*-svc|gateway|prometheus-server"} == 0
           for: 5m
           labels:
+            namespace: kasten-io
             severity: critical
           annotations:
             summary: A Kasten deployment has no available replica
