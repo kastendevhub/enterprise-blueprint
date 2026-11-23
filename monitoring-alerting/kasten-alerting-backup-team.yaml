@@ -1,0 +1,28 @@
+# Sends all the Kasten alerts to the backup team.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: kasten-backup-team
+  namespace: kasten-io
+spec:
+  route:
+    # Only the Kasten alerts: every Kasten rule sets namespace=kasten-io and is named kasten-*.
+    # - namespace: the Prometheus operator already adds this matcher to a route defined in
+    #   kasten-io; it is explicit so the route stays scoped whatever the matcher strategy.
+    # - alertname: excludes the other alerts about kasten-io, for instance the
+    #   KubePodCrashLooping of kube-prometheus-stack. Remove it if the backup team wants them.
+    matchers:
+      - name: namespace
+        value: kasten-io
+        matchType: =
+      - name: alertname
+        value: kasten-.*
+        matchType: =~
+    groupBy: ['alertname']
+    groupWait: 5s
+    groupInterval: 5m
+    repeatInterval: 5h
+    receiver: 'kasten-backup-team'
+  receivers:
+  - name: 'kasten-backup-team'
+    # configure your receiver here (email, slack, webhook, ...)

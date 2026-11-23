@@ -204,10 +204,12 @@ stringData:
                        # catch-all for the alerts of the other applications (istio, ...)
                        receiver: "default"
                        routes:
-                       # only the Kasten alerts reach the backup team
+                       # only the Kasten alerts reach the backup team;
+                       # keep this route first, it stops the Kasten alerts here
                        - receiver: "kasten-backup-team"
                          matchers:
                          - namespace = "kasten-io"
+                         - alertname =~ "kasten-.*"
                      receivers:
                      # no integration: alerts routed here are dropped,
                      # replace with the receiver of the platform team if you have one
@@ -232,7 +234,11 @@ Route on the `namespace` label instead. OpenShift forces `namespace` to the name
 `PrometheusRule` on every alert it generates (see
 [Check the Alerting Rules Are Activated](#check-the-alerting-rules-are-activated)), so all
 the Kasten alerts carry `namespace="kasten-io"`, and the rules of another namespace cannot
-produce an alert with that label. The sub-route above relies on this.
+produce an alert with that label. The `alertname =~ "kasten-.*"` matcher also excludes any
+other rule someone would create in `kasten-io`: all the Kasten rules are named `kasten-*`.
+
+The route is first and has no `continue`, so a Kasten alert stops there and never reaches
+the routes of the other teams.
 
 #### Alternative: let the backup team own its routing with an `AlertmanagerConfig`
 
@@ -256,6 +262,13 @@ metadata:
   namespace: kasten-io
 spec:
   route:
+    matchers:
+    - name: namespace
+      value: kasten-io
+      matchType: =
+    - name: alertname
+      value: kasten-.*
+      matchType: =~
     receiver: kasten-backup-team
   receivers:
   - name: kasten-backup-team
@@ -270,9 +283,32 @@ spec:
       requireTLS: false
 ```
 
-The operator adds a `namespace="kasten-io"` matcher to this route, so it can only receive
-the Kasten alerts, whatever the team writes in it. The secret `alertmanager-user-workload`
-then only keeps the catch-all `default` route.
+This is [kasten-alerting-backup-team.yaml](./kasten-alerting-backup-team.yaml) with an email
+receiver. The explicit `namespace` matcher is redundant on OpenShift: the operator adds a
+`namespace="kasten-io"` matcher to this route anyway, so it can only receive the Kasten
+alerts, whatever the team writes in it.
+
+The operator always sets `continue: true` on this route and places it before the routes of
+the secret `alertmanager-user-workload`, so after the backup team, a Kasten alert goes on
+through the routes of the secret. If one of them matches it (for instance
+`severity = "critical"` to an on-call team), that team receives it too. To make sure the
+Kasten alerts reach only the backup team, start the routes of the secret with a route that
+stops them:
+
+```yaml
+route:
+  receiver: "default"
+  routes:
+  # the Kasten alerts were already sent by the AlertmanagerConfig route: stop them here
+  - receiver: "kasten-stop"
+    matchers:
+    - namespace = "kasten-io"
+    - alertname =~ "kasten-.*"
+  # ... the routes of the other teams
+receivers:
+- name: "default"
+- name: "kasten-stop"   # no integration: nothing is sent
+```
 
 ### Multiple recipients
 

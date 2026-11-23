@@ -257,17 +257,23 @@ Which means that alert manager is doing nothing with this alert it send it to th
 In most organisations one backup team handles all the Kasten alerts, so a single
 `AlertmanagerConfig` is enough.
 
-All the Kasten rules set the label `namespace=kasten-io`. An `AlertmanagerConfig` created in
-`kasten-io` gets a `namespace="kasten-io"` matcher added by the operator, so it receives all the
-Kasten alerts and nothing else.
+The route of [kasten-alerting-backup-team.yaml](./kasten-alerting-backup-team.yaml) matches
+two labels that every Kasten alert has and no other alert has together:
+
+- `namespace="kasten-io"`: all the Kasten rules set it. The Prometheus operator also adds this
+  matcher to every route generated from an `AlertmanagerConfig` in `kasten-io`; it is explicit
+  in the file so the route stays scoped whatever the operator's `alertmanagerConfigMatcherStrategy`.
+- `alertname=~"kasten-.*"`: all the Kasten rules are named `kasten-*`. It excludes the other
+  alerts about `kasten-io`, for instance `KubePodCrashLooping` from the default rules of
+  kube-prometheus-stack. Remove it if the backup team wants those too.
 
 ```
-kubectl create -f kasten-alerting-operating-kasten.yaml
+kubectl create -f kasten-alerting-backup-team.yaml
 ```
 
 The [configuration](http://localhost:9093/#/status) of alertmanager now has a sub-route:
 ```
-  - receiver: kasten-io/kasten-alerting/kasten-operating-receiver
+  - receiver: kasten-io/kasten-backup-team/kasten-backup-team
     group_by:
     - alertname
     matchers:
@@ -275,7 +281,26 @@ The [configuration](http://localhost:9093/#/status) of alertmanager now has a su
     continue: true
 ```
 
-Now if you scale down a kasten service you will see the alert sent to the receiver kasten-io/kasten-alerting/kasten-operating-receiver.
+Now if you scale down a kasten service you will see the alert sent to the receiver kasten-io/kasten-backup-team/kasten-backup-team.
+
+The operator forces this `continue: true` and places the route before the routes of the main
+Alertmanager configuration (the `alertmanager.config` of the kube-prometheus-stack values). A
+Kasten alert therefore goes on through those routes, and any of them that matches it (for
+instance `severity="critical"` to an on-call team) also receives it. To make sure the Kasten
+alerts reach only the backup team, start the main routes with a route that stops them:
+
+```yaml
+alertmanager:
+  config:
+    route:
+      routes:
+      # the Kasten alerts were already sent by the AlertmanagerConfig route: stop them here
+      - receiver: "null"
+        matchers:
+        - namespace="kasten-io"
+        - alertname=~"kasten-.*"
+      # ... the existing routes (Watchdog, other teams)
+```
 
 If you unfold the info button of the kasten-failed-action alert you'll see that the description 
 ```
@@ -294,8 +319,15 @@ the same `AlertmanagerConfig` rather than creating another one:
 ```yaml
 spec:
   route:
+    matchers:
+      - name: namespace
+        value: kasten-io
+        matchType: =
+      - name: alertname
+        value: kasten-.*
+        matchType: =~
     groupBy: ['alertname']
-    receiver: 'kasten-operating-receiver'
+    receiver: 'kasten-backup-team'
     routes:
     - matchers:
       - name: app_namespace
@@ -304,7 +336,7 @@ spec:
       receiver: 'failed-ns-team'
       continue: true   # the backup team still gets it
   receivers:
-  - name: 'kasten-operating-receiver'
+  - name: 'kasten-backup-team'
   - name: 'failed-ns-team'
 ```
 
