@@ -14,7 +14,7 @@ spec:
       rules:
         - alert: kasten-catalog-over-50-percent
           annotations:
-            description: 'The size of the catalog is over 50 %: {{ printf "%.1f" $value }} %{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
+            description: 'The size of the catalog is over 50 %: {{ $value | humanize }} %{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
             runbook_url: 'https://docs.kasten.io/latest/references/best-practices.html#monitoring-and-alerting'
             summary: 'The size of the catalog is over 50 %{{ with $labels.cluster }} on cluster {{ . }}{{ end }}.'
           expr: 100 - catalog_persistent_volume_free_space_percent > 50
