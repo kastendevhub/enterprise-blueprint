@@ -18,7 +18,7 @@ spec:
     - key: component
       operator: NotIn
       values: [aggregatedapis, frontend, console-plugin, console-plugin-proxy, prometheus-server, dex]
-  # copy the service label app=k10 on every series (used by kasten-executor-down)
+  # copy the service label app=k10 on every series, as in the embedded Prometheus
   targetLabels: [app]
   endpoints:
   # one entry per metrics port name; a service without this port is simply ignored
@@ -27,8 +27,10 @@ spec:
     relabelings: &k10
     - targetLabel: application  # used by kasten-service-down, as in the embedded Prometheus
       replacement: k10
-    - targetLabel: cluster        # your new label
-      replacement: <cluster_name>
+    # Optional, if several clusters send their alerts to the same receiver: the rules
+    # add "on cluster <name>" to the summary and description when this label exists.
+    # - targetLabel: cluster
+    #   replacement: my-cluster
   - port: events                # state-svc 8001: events_service_event_groups
     interval: 30s
     relabelings: *k10

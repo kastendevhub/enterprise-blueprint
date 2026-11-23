@@ -11,6 +11,9 @@ metadata:
 spec:
   groups:
     - name: ./kasten.rules
+      # Every rule sets namespace=kasten-io so that all the Kasten alerts can be routed on it
+      # (OpenShift forces this label anyway). The application namespace of an action is in
+      # app_namespace: route on it to send the alerts of one application to its own team.
       rules:
         - alert: kasten-catalog-over-50-percent
           annotations:
@@ -28,6 +31,7 @@ spec:
             summary: 'Action on error{{ with $labels.cluster }} on cluster {{ . }}{{ end }}'
           expr: increase(action_ended_total{state="failed"}[1h]) > 0
           labels:
+            namespace: kasten-io
             severity: critical
         - alert: kasten-skipped-action
           annotations:
@@ -37,6 +41,7 @@ spec:
           # action_skipped_total has no state label.
           expr: increase(action_skipped_total[1h]) > 0
           labels:
+            namespace: kasten-io
             severity: warning
         - alert: kasten-license-non-compliant
           annotations:
@@ -62,6 +67,7 @@ spec:
             or
             absent_over_time(action_ended_total{policy="k10-disaster-recovery-policy",state="succeeded"}[25h])
           labels:
+            namespace: kasten-io
             severity: critical
         - alert: kasten-policies-without-export-location
           annotations:
@@ -71,6 +77,7 @@ spec:
           # chained is empty for a backup-only policy, and "multi" for 3 or more actions.
           expr: policies_count{action="backup",chained="",status="Success"} > 0
           labels:
+            namespace: kasten-io
             severity: critical
         - alert: kasten-event-group
           expr: events_service_event_groups > 0
@@ -109,4 +116,5 @@ spec:
               repository_data_procedure_total{status!="success",operation="maintenance_full"} offset 1h
             )
           labels:
+            namespace: kasten-io
             severity: critical

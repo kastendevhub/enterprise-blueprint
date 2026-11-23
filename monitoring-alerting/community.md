@@ -106,21 +106,29 @@ And that each targets inside the group is up.
 kubectl create -f kasten-rules.yaml 
 ```
 
-It contains 5 rules also deployed in kasten-io:
+It contains these rules, also deployed in kasten-io:
 
-- catalog-over-50-percent: check that the size of catalog is not over 50% which would block future 
+- kasten-catalog-over-50-percent: check that the size of catalog is not over 50% which would block future 
 update in case of schema upgrade of the catalog. It's severity is `warning` has it is not an immediate
 danger for your backups.
-- action-on-error: probably the most important, it detects an action failed whatever the action but most 
+- kasten-failed-action: probably the most important, it detects an action failed whatever the action but most 
 of the time it's `export` or `backup` action. It's severity is `critical` because then you may be not 
 protected anymore.
-- license-non-compliant: check if your license pool is consistent with your cluster. If it is not the case
+- kasten-skipped-action: an action was skipped, for instance because the previous run of the policy was
+still running. Severity `warning`.
+- kasten-license-non-compliant: check if your license pool is consistent with your cluster. If it is not the case
  you have a grace period of 50 days to remediate. Hence the severity is `warning` as your backups are not 
  immediately at risk.
-- kasten-service-down and kasten-executor-down: detect if one of the kasten service or one of the kasten 
-executor is down. If that happens it's a very bad sign and 
+- kasten-dr-policy-not-in-place: no successful Kasten DR backup in the last 25 hours.
+- kasten-policies-without-export-location: a backup policy does not export its restore points.
+- kasten-service-down: detect if one of the kasten service or one of the kasten 
+executor is down. If that happens it's a very bad sign.
 - kasten-event-group: different global events that kasten can send, for instance kasten has detected that an
 an attempt to tamper an immutable backup has been done or a policy does not validate anymore.
+- kasten-full-maintenance-failed: the full maintenance of a repository failed.
+
+Every rule sets the label `namespace=kasten-io`. The application namespace of an action is in the
+label `app_namespace`.
 
 To check your rules are properly deployed go in the prometheus UI > Status > Rules and check that you have 
 an entry `./kasten.rules`. Check that the rules are OK, you should see the last evaluation of the rules.
@@ -132,10 +140,10 @@ expression was evaluated properly.
 Before configuring alertmanager we need to check first that alert are fired properly by the rules.
 
 To check the alerts are firing properly were going to test 2 criticals rules : 
-- action-on-error
+- kasten-failed-action
 - kasten-service-down
 
-## Action on error 
+## Failed action 
 
 Creating backup on error is simple you just have to create a failed workload that you backup regulary 
 for instance every 5 minutes: 
@@ -195,8 +203,9 @@ EOF
 ```
 
 After 15 minutes check in [Prometheus UI > Alerts > Firing](http://localhost:9090/alerts?search=) 
-and you should see the action-on-error alert firing. Unfold it to see all the labels associated 
-with the alert, those labels were copied from the metrics `catalog_actions_count`.
+and you should see the kasten-failed-action alert firing. Unfold it to see all the labels associated 
+with the alert, those labels were copied from the metric `action_ended_total` (`action`, `subtype`,
+`policy`, `app_namespace`, ...).
 
 ## Kasten service is down 
 
@@ -236,136 +245,71 @@ route:
   repeat_interval: 12h
 ```
 
-And you can confirm that the action-on-error alert (which is still firing) is routed to this 
+And you can confirm that the kasten-failed-action alert (which is still firing) is routed to this 
 `null receiver` by going to the [Alertmanager > UI](http://localhost:9093/#/alerts)
 
-If you unfold the "+ null [ namespace=failed-ns]"  you'll see the label associated to this alert.
+If you unfold the "+ null [ namespace=kasten-io]"  you'll see the label associated to this alert.
 
 Which means that alert manager is doing nothing with this alert it send it to the null receiver.
 
-## The "one receiver per namespace" approach 
+## Route the Kasten alerts to the backup team
 
-The possibility to configure alertmanager can be overwhelming and we want to take a simple approach
-which is one receiver per namespace. The idea is that we're going to create an AlertManangerConfig 
-resource per namespace that will capture the alert of type action-on-error
+In most organisations one backup team handles all the Kasten alerts, so a single
+`AlertmanagerConfig` is enough.
 
-Create the alerting for the failed-ns namespace 
-```
-kubectl create -f kasten-alerting-action-on-error.yaml -n failed-ns
-```
+All the Kasten rules set the label `namespace=kasten-io`. An `AlertmanagerConfig` created in
+`kasten-io` gets a `namespace="kasten-io"` matcher added by the operator, so it receives all the
+Kasten alerts and nothing else.
 
-Now if you check the global route configuration of alertmanager 
 ```
-route:
-  receiver: "null"
-  group_by:
-  - namespace
-  continue: false
-  routes:
-  - receiver: failed-ns/kasten-alerting/kasten-action-on-error-receiver
-    group_by:
-    - type
-    matchers:
-    - alertname="action-on-error"
-    - namespace="failed-ns"
-    continue: true
-    group_wait: 5s
-    group_interval: 5m
-    repeat_interval: 5h
-  - receiver: "null"
-    matchers:
-    - alertname="Watchdog"
-    continue: false
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 12h
+kubectl create -f kasten-alerting-operating-kasten.yaml
 ```
 
-You can see that a new sub-route has been created with this 2 matchers
+The [configuration](http://localhost:9093/#/status) of alertmanager now has a sub-route:
 ```
-    matchers:
-    - alertname="action-on-error"
-    - namespace="failed-ns"
-```
-
-The action-on-error will be directed to the `failed-ns/kasten-alerting/kasten-receiver` 
-receiver. And you can confirm it by checking the [alerts](http://localhost:9093/#/alerts).
-
-If you unfold the info button you'll see that the description section 
-```
-"The action of type {{ $labels.type}} executed on policy {{ $labels.policy}} for the namespace {{ $labels.namespace}} is on error."
-```
-Hes been properly evaluated 
-
-This let you design different type of receiver per namespace. However configuring the receiver 
-(slack, webhook, teams ... ) is beyond the scope of this guide. 
-
-## routing the other alerts 
-
-We still need to route properly the other alert : 
-- catalog-over-50-percent
-- license-non-compliant
-- kasten-service-down
-- kasten-executor-down
-
-And metrics triggered by them does not have any `namespace` label that's why we add it 
-statically on the rules. 
-
-If you observe thoses rules you can see that we purposely add the label `namespace=kasten-io`
-```
-      labels:
-        severity: critical 
-        namespace: kasten-io  
-```
-but did not do that for the `action-on-error` rule.
-
-This provide a simple way to route this error to a specific kasten receiver.
-
-Let's apply it 
-```
-kubectl create -f kubectl create -f kasten-alerting-operating-kasten.yaml
-```
- 
-The [configuration](http://localhost:9093/#/status) of the routing of alertmanager
-```
-route:
-  receiver: "null"
-  group_by:
-  - namespace
-  continue: false
-  routes:
-  - receiver: failed-ns/kasten-alerting/kasten-action-on-error-receiver
-    group_by:
-    - type
-    matchers:
-    - alertname="action-on-error"
-    - namespace="failed-ns"
-    continue: true
-    group_wait: 5s
-    group_interval: 5m
-    repeat_interval: 5h
   - receiver: kasten-io/kasten-alerting/kasten-operating-receiver
     group_by:
     - alertname
     matchers:
     - namespace="kasten-io"
     continue: true
-    group_wait: 5s
-    group_interval: 5m
-    repeat_interval: 5h
-  - receiver: "null"
-    matchers:
-    - alertname="Watchdog"
-    continue: false
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 12h
 ```
-Show 2 subroutes : 
-- failed-ns/kasten-alerting/kasten-action-on-error-receiver which is specific to a namespace
-- kasten-io/kasten-alerting/kasten-operating-receiver for the rest
 
 Now if you scale down a kasten service you will see the alert sent to the receiver kasten-io/kasten-alerting/kasten-operating-receiver.
+
+If you unfold the info button of the kasten-failed-action alert you'll see that the description 
+```
+'The action of type {{ $labels.action }}{{ with $labels.subtype }} and subtype {{ . }}{{ end }} executed on policy {{ $labels.policy }} for the namespace {{ $labels.app_namespace }}{{ with $labels.cluster }} on cluster {{ . }}{{ end }} is failing.'
+```
+has been properly evaluated.
+
+Configuring the receiver (slack, webhook, teams ... ) is beyond the scope of this guide.
+
+### Optional: send the failed actions of one application to its own team
+
+The `namespace` label of a Kasten alert is always `kasten-io`; the namespace of the application
+is in `app_namespace`. If an application team wants its failed actions too, add a child route in
+the same `AlertmanagerConfig` rather than creating another one:
+
+```yaml
+spec:
+  route:
+    groupBy: ['alertname']
+    receiver: 'kasten-operating-receiver'
+    routes:
+    - matchers:
+      - name: app_namespace
+        value: failed-ns
+        matchType: =
+      receiver: 'failed-ns-team'
+      continue: true   # the backup team still gets it
+  receivers:
+  - name: 'kasten-operating-receiver'
+  - name: 'failed-ns-team'
+```
+
+Do not create this `AlertmanagerConfig` in the application namespace: the operator adds a matcher
+on the namespace of the `AlertmanagerConfig`, and no Kasten alert has `namespace="failed-ns"`.
 
 # replacing the internal prometheus by the external prometheus 
 

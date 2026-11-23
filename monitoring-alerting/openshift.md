@@ -67,9 +67,8 @@ The metrics used by the rules are spread over several of them, and not always on
 
 | Metric | Service, port |
 |---|---|
-| `catalog_actions_count`, `catalog_persistent_volume_free_space_percent` | catalog-svc, `http` (8000) |
+| `action_ended_total`, `action_skipped_total`, `catalog_persistent_volume_free_space_percent` | catalog-svc, `http` (8000) |
 | `policies_count` | controllermanager-svc, `http` (8000) |
-| `compliance_count` | dashboardbff-svc, `http` (8000) |
 | `metering_license_compliance_status` | metering-svc, `http` (8000) |
 | `events_service_event_groups` | state-svc, `events` (8001) |
 | `repository_data_procedure_total` | crypto-svc, `repositories` (8003) |
@@ -83,14 +82,18 @@ oc apply -f kasten-ocp-servicemonitor.yaml
 
 It selects all the Kasten services except those without metrics, and declares one endpoint per
 metrics port name. A service that does not have a given port is ignored for that endpoint. It also
-adds the labels `application="k10"` and `app="k10"`, which `kasten-service-down` and
-`kasten-executor-down` filter on.
+adds the labels `application="k10"` and `app="k10"` on every target, executors included, so
+`kasten-service-down` (`up{application="k10"} == 0`) covers all of them.
+
+If several clusters send their alerts to the same receiver, uncomment the `cluster` relabeling
+in the ServiceMonitor and set the name of the cluster. The rules then add `on cluster <name>`
+to the summary and the description of every alert.
 
 After a minute you should have 19 targets `up` in `kasten-io` (Observe > Targets in the console).
 
 > Older versions of this page created 5 ServiceMonitors (catalog, controllermanager, metering,
 > dashboardbff, crypto, port `http` only). With those, `kasten-event-group`,
-> `kasten-full-maintenance-failed`, `kasten-service-down` and `kasten-executor-down` never fire.
+> `kasten-full-maintenance-failed` and `kasten-service-down` (for the executors) never fire.
 > Delete them before applying the new one:
 > `oc delete servicemonitor -n kasten-io catalog-metrics controllermanager-metrics metering-metrics dashboardbff-metrics crypto-metrics`
 
@@ -158,15 +161,15 @@ data:
           > 50
       - alert: kasten-failed-action
         ...
-        expr: increase(catalog_actions_count{namespace="kasten-io",status="failed"}[1h])
+        expr: increase(action_ended_total{namespace="kasten-io",state="failed"}[1h])
           > 0
       ...
 ```
 
-Because the `namespace` label is forced to `kasten-io`, the application namespace that Kasten
-puts in `namespace` is renamed `exported_namespace`. The descriptions in
-[kasten-rules.yaml](./kasten-rules.yaml) use `{{ or $labels.exported_namespace $labels.namespace }}`,
-so they show the right namespace on OpenShift and on a plain Prometheus stack.
+Forcing `namespace` does not lose the application namespace: the action metrics
+(`action_ended_total`, `action_skipped_total`) carry it in `app_namespace`, which the
+descriptions in [kasten-rules.yaml](./kasten-rules.yaml) display. Route on `app_namespace`
+to send the failed actions of one application to its own team.
 
 You can also find them in the UI:
 
