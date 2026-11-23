@@ -195,9 +195,18 @@ stringData:
                        smtp_auth_password: "xxxxx"
                        smtp_require_tls: false
                      route:
-                       receiver: "email-notifications"
+                       # catch-all for the alerts of the other applications (istio, ...)
+                       receiver: "default"
+                       routes:
+                       # only the Kasten alerts reach the backup team
+                       - receiver: "kasten-backup-team"
+                         matchers:
+                         - namespace = "kasten-io"
                      receivers:
-                     - name: "email-notifications"
+                     # no integration: alerts routed here are dropped,
+                     # replace with the receiver of the platform team if you have one
+                     - name: "default"
+                     - name: "kasten-backup-team"
                        email_configs:
                        - to: "support@kasten.io,ops-team@example.com"
                          headers:
@@ -206,6 +215,58 @@ stringData:
 type: Opaque
 EOF
 ```
+
+### Route only the Kasten alerts to the backup team
+
+The Alertmanager of user workload monitoring is shared by every application that defines
+a `PrometheusRule` (Istio, your own apps, ...). Do not use the backup team's receiver as the
+top-level `receiver`: it is the catch-all and would send them every alert.
+
+Route on the `namespace` label instead. OpenShift forces `namespace` to the namespace of the
+`PrometheusRule` on every alert it generates (see
+[Check the Alerting Rules Are Activated](#check-the-alerting-rules-are-activated)), so all
+the Kasten alerts carry `namespace="kasten-io"`, and the rules of another namespace cannot
+produce an alert with that label. The sub-route above relies on this.
+
+#### Alternative: let the backup team own its routing with an `AlertmanagerConfig`
+
+If several teams share the cluster, editing a single secret for everyone does not scale.
+OpenShift can let each team define an `AlertmanagerConfig` in its own namespace. Enable it in
+the ConfigMap `user-workload-monitoring-config`:
+
+```yaml
+    alertmanager:
+      enabled: true
+      enableAlertmanagerConfig: true
+```
+
+Then create the routing in `kasten-io`:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1beta1
+kind: AlertmanagerConfig
+metadata:
+  name: kasten-backup-team
+  namespace: kasten-io
+spec:
+  route:
+    receiver: kasten-backup-team
+  receivers:
+  - name: kasten-backup-team
+    emailConfigs:
+    - to: "support@kasten.io,ops-team@example.com"
+      smarthost: "smtp-relay.brevo.com:587"
+      from: "michael@kasten.com"
+      authUsername: "michael.courcy@veeam.com"
+      authPassword:
+        name: kasten-smtp          # a Secret in kasten-io
+        key: password
+      requireTLS: false
+```
+
+The operator adds a `namespace="kasten-io"` matcher to this route, so it can only receive
+the Kasten alerts, whatever the team writes in it. The secret `alertmanager-user-workload`
+then only keeps the catch-all `default` route.
 
 ### Multiple recipients
 
